@@ -162,7 +162,7 @@ final class AttributeDamageDispatcher {
             if (damage <= 0.0D) return;
             dispatch(new AttributeDamageEvent(attacker, target, damage, Source.ATTRIBUTE_PLUS));
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[AttributeDamageDispatcher] AttributePlus damage dispatch failed: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] AttributePlus damage dispatch failed: " + e.getMessage());
         }
     }
 
@@ -183,7 +183,7 @@ final class AttributeDamageDispatcher {
             if (damage <= 0.0D) return;
             dispatch(new AttributeDamageEvent(attacker, target, damage, Source.ATTRIBUTE_PLUS));
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[AttributeDamageDispatcher] AttributePlus attack dispatch failed: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] AttributePlus attack dispatch failed: " + e.getMessage());
         }
     }
 
@@ -243,7 +243,7 @@ final class AttributeDamageDispatcher {
             }
             dispatch(new AttributeDamageEvent(attacker, target, damage, Source.CRANE_ATTRIBUTE));
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[AttributeDamageDispatcher] CraneAttribute dispatch failed: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] CraneAttribute dispatch failed: " + e.getMessage());
         }
     }
 
@@ -304,7 +304,7 @@ final class AttributeDamageDispatcher {
             }
             dispatchHeal(new AttributeHealEvent(source, target, heal, SourceType.CRANE_ATTRIBUTE));
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[AttributeDamageDispatcher] CraneAttribute heal dispatch failed: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] CraneAttribute heal dispatch failed: " + e.getMessage());
         }
     }
 
@@ -364,7 +364,7 @@ final class AttributeDamageDispatcher {
             Player attacker = target instanceof LivingEntity le ? resolveMythicLibAttacker(le) : null;
             dispatch(new AttributeDamageEvent(attacker, target, damage, Source.MYTHIC_LIB));
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[AttributeDamageDispatcher] MythicLib dispatch failed: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] MythicLib dispatch failed: " + e.getMessage());
         }
     }
 
@@ -420,7 +420,7 @@ final class AttributeDamageDispatcher {
             if (damage <= 0.0D) return;
             dispatch(new AttributeDamageEvent(attacker, target, damage, Source.SYMPHONY));
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[AttributeDamageDispatcher] Symphony damage dispatch failed: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] Symphony damage dispatch failed: " + e.getMessage());
         }
     }
 
@@ -467,7 +467,7 @@ final class AttributeDamageDispatcher {
             if (amount <= 0.0D) return;
             dispatchHeal(new AttributeHealEvent(source, target, amount, SourceType.SYMPHONY));
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[AttributeDamageDispatcher] Symphony heal dispatch failed: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] Symphony heal dispatch failed: " + e.getMessage());
         }
     }
 
@@ -485,7 +485,7 @@ final class AttributeDamageDispatcher {
             try {
                 listener.onAttributeDamage(event);
             } catch (Exception e) {
-                plugin.getLogger().warning("[AttributeDamageDispatcher] Listener " + listener.getClass().getName() + " threw: " + e.getMessage());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] Listener " + listener.getClass().getName() + " threw: " + e.getMessage());
             }
         }
     }
@@ -495,7 +495,7 @@ final class AttributeDamageDispatcher {
             try {
                 listener.onAttributeHeal(event);
             } catch (Exception e) {
-                plugin.getLogger().warning("[AttributeDamageDispatcher] Heal listener " + listener.getClass().getName() + " threw: " + e.getMessage());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributeDamageDispatcher] Heal listener " + listener.getClass().getName() + " threw: " + e.getMessage());
             }
         }
     }

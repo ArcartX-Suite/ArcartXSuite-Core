@@ -47,7 +47,7 @@ public final class MythicItemBridge {
             getItemStackWithAmountMethod = itemManager.getClass().getMethod("getItemStack", String.class, int.class);
             available = true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("初始化 MythicMobs 物品桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 MythicMobs 物品桥接失败: " + exception.getMessage());
         }
     }
 

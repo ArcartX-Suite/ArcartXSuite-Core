@@ -831,7 +831,7 @@ public final class ModuleRegistry {
         // 全局事件总线
         if (!capabilities.containsKey(xuanmo.arcartxsuite.api.capability.EventBusCapability.class)) {
             capabilities.put(xuanmo.arcartxsuite.api.capability.EventBusCapability.class,
-                new SimpleEventBus(plugin.getLogger()));
+                new SimpleEventBus(AxsLog.logger()));
         }
 
         // 统一账号识别服务（微软正版 / LittleSkin / 离线）
@@ -926,7 +926,7 @@ public final class ModuleRegistry {
         int mixedProxyPort = (yggdrasilSource != null && yggdrasilSource.contains("?mixed"))
             ? rootConfig.getInt("auth.mixed-proxy-port", 25599)
             : 0;
-        accountTypeService = new AccountTypeServiceImpl(plugin.getLogger(), enableLookup, timeoutMs, debug, proxyHost, proxyPort, mixedProxyPort);
+        accountTypeService = new AccountTypeServiceImpl(AxsLog.logger(), enableLookup, timeoutMs, debug, proxyHost, proxyPort, mixedProxyPort);
         Bukkit.getPluginManager().registerEvents(accountTypeService, plugin);
         LOGGER.fine("统一账号识别服务已就绪 | Mojang查询=" + enableLookup
             + " | 超时=" + timeoutMs + "ms | 混合代理端口=" + mixedProxyPort

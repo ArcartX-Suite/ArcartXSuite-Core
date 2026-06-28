@@ -29,6 +29,7 @@ public final class TaczCombatBridge {
 
     private final JavaPlugin plugin;
     private final boolean debug;
+    private final ClassLoader modClassLoader;
     private boolean active;
 
     // Forge 反射缓存
@@ -39,35 +40,47 @@ public final class TaczCombatBridge {
     private Method getGunIdMethod;
     private Method getBukkitEntityMethod;
 
-    private TaczCombatBridge(JavaPlugin plugin, boolean debug) {
+    private TaczCombatBridge(JavaPlugin plugin, boolean debug, ClassLoader modClassLoader) {
         this.plugin = plugin;
         this.debug = debug;
+        this.modClassLoader = modClassLoader;
+    }
+
+    /**
+     * 解析能看到 TACZ Mod / Forge / NMS 类的类加载器。
+     * <p>这些类由服务端（混合核心）类加载器加载，不属于任何 Bukkit 插件加载器。
+     * 薄壳重构后插件类由 ProtectedClassLoader 定义，单参 {@code Class.forName} 的
+     * 调用者加载器够不到 Mod/NMS 类，因此必须显式使用服务端类加载器。
+     */
+    private static ClassLoader resolveModClassLoader() {
+        return Bukkit.getServer().getClass().getClassLoader();
     }
 
     public static TaczCombatBridge tryInitialize(JavaPlugin plugin, boolean enabled, boolean debug) {
         if (!enabled) {
-            plugin.getLogger().fine("[TaczCombat] TACZ 兼容已在 config.yml 中关闭。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().fine("[TaczCombat] TACZ 兼容已在 config.yml 中关闭。");
             return null;
         }
+        ClassLoader modClassLoader = resolveModClassLoader();
         try {
-            Class.forName("com.tacz.guns.GunMod");
+            Class.forName("com.tacz.guns.GunMod", false, modClassLoader);
         } catch (ClassNotFoundException ignored) {
             if (debug) {
-                plugin.getLogger().fine("[TaczCombat] TACZ Mod 未检测到，跳过桥接初始化。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().fine("[TaczCombat] TACZ Mod 未检测到，跳过桥接初始化。");
             }
             return null;
         }
         try {
-            TaczCombatBridge bridge = new TaczCombatBridge(plugin, debug);
+            TaczCombatBridge bridge = new TaczCombatBridge(plugin, debug, modClassLoader);
             if (!bridge.registerForgeEventListener()) {
-                plugin.getLogger().warning("[TaczCombat] 无法注册 Forge 事件监听器，TACZ 伤害桥接未启用。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[TaczCombat] 无法注册 Forge 事件监听器，TACZ 伤害桥接未启用。");
                 return null;
             }
             bridge.active = true;
-            plugin.getLogger().info("[TaczCombat] TACZ 伤害桥接已启用。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().info("[TaczCombat] TACZ 伤害桥接已启用。");
             return bridge;
         } catch (Exception exception) {
-            plugin.getLogger().log(Level.WARNING, "[TaczCombat] TACZ 桥接初始化失败。", exception);
+            xuanmo.arcartxsuite.module.AxsLog.logger().log(Level.WARNING, "[TaczCombat] TACZ 桥接初始化失败。", exception);
             return null;
         }
     }
@@ -75,7 +88,7 @@ public final class TaczCombatBridge {
     public void shutdown() {
         if (active) {
             active = false;
-            plugin.getLogger().info("[TaczCombat] TACZ 伤害桥接已关闭。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().info("[TaczCombat] TACZ 伤害桥接已关闭。");
         }
     }
 
@@ -89,7 +102,7 @@ public final class TaczCombatBridge {
     private boolean registerForgeEventListener() {
         try {
             // 1. 加载 TACZ 事件类
-            Class<?> eventPreClass = Class.forName(TACZ_EVENT_CLASS);
+            Class<?> eventPreClass = Class.forName(TACZ_EVENT_CLASS, true, modClassLoader);
 
             // 2. 缓存事件方法（尝试多种可能的方法名）
             getHurtEntityMethod = findMethodByNames(eventPreClass, "getHurtEntity", "getEntity", "getTarget");
@@ -99,7 +112,7 @@ public final class TaczCombatBridge {
             getGunIdMethod = findMethodByNames(eventPreClass, "getGunId", "getGunID");
 
             if (getHurtEntityMethod == null || getAttackerMethod == null || getBaseAmountMethod == null) {
-                plugin.getLogger().warning("[TaczCombat] 无法找到 TACZ 事件所需方法: hurtEntity="
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[TaczCombat] 无法找到 TACZ 事件所需方法: hurtEntity="
                     + (getHurtEntityMethod != null) + ", attacker=" + (getAttackerMethod != null)
                     + ", baseAmount=" + (getBaseAmountMethod != null));
                 logAvailableMethods(eventPreClass);
@@ -107,37 +120,37 @@ public final class TaczCombatBridge {
             }
 
             // 3. NMS Entity -> Bukkit Entity 转换
-            Class<?> nmsEntityClass = Class.forName(NMS_ENTITY_CLASS);
+            Class<?> nmsEntityClass = Class.forName(NMS_ENTITY_CLASS, true, modClassLoader);
             getBukkitEntityMethod = nmsEntityClass.getMethod("getBukkitEntity");
 
             // 4. 获取 Forge 事件总线
-            Class<?> forgeClass = Class.forName(FORGE_CLASS);
+            Class<?> forgeClass = Class.forName(FORGE_CLASS, true, modClassLoader);
             Field eventBusField = forgeClass.getDeclaredField("EVENT_BUS");
             Object eventBus = eventBusField.get(null);
 
             // 5. 获取 EventPriority.NORMAL
-            Class<?> priorityClass = Class.forName(FORGE_PRIORITY_CLASS);
+            Class<?> priorityClass = Class.forName(FORGE_PRIORITY_CLASS, true, modClassLoader);
             Object normalPriority = Enum.valueOf((Class<Enum>) priorityClass, "NORMAL");
 
             // 6. 注册监听器: addListener(EventPriority, boolean, Class<T>, Consumer<T>)
             Consumer<Object> listener = this::handleGunDamageEvent;
             Method addListenerMethod = findAddListenerMethod(eventBus, priorityClass);
             if (addListenerMethod == null) {
-                plugin.getLogger().warning("[TaczCombat] 无法找到 IEventBus.addListener 方法。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[TaczCombat] 无法找到 IEventBus.addListener 方法。");
                 return false;
             }
 
             addListenerMethod.invoke(eventBus, normalPriority, false, eventPreClass, listener);
 
             if (debug) {
-                plugin.getLogger().info("[TaczCombat] Forge 事件监听器注册成功 -> " + TACZ_EVENT_CLASS);
+                xuanmo.arcartxsuite.module.AxsLog.logger().info("[TaczCombat] Forge 事件监听器注册成功 -> " + TACZ_EVENT_CLASS);
             }
             return true;
         } catch (ClassNotFoundException e) {
-            plugin.getLogger().warning("[TaczCombat] 未找到所需类: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[TaczCombat] 未找到所需类: " + e.getMessage());
             return false;
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "[TaczCombat] 注册 Forge 事件监听器失败", e);
+            xuanmo.arcartxsuite.module.AxsLog.logger().log(Level.WARNING, "[TaczCombat] 注册 Forge 事件监听器失败", e);
             return false;
         }
     }
@@ -218,14 +231,14 @@ public final class TaczCombatBridge {
             }
         } catch (Exception e) {
             if (debug) {
-                plugin.getLogger().log(Level.WARNING, "[TaczCombat] 处理 TACZ 伤害事件异常", e);
+                xuanmo.arcartxsuite.module.AxsLog.logger().log(Level.WARNING, "[TaczCombat] 处理 TACZ 伤害事件异常", e);
             }
         }
     }
 
     private void logTaczGunDamageEvent(Player attacker, LivingEntity target, double damage, boolean headShot) {
         if (debug) {
-            plugin.getLogger().info("[TaczCombat] 广播 TACZ 伤害 -> attacker=" + attacker.getName()
+            xuanmo.arcartxsuite.module.AxsLog.logger().info("[TaczCombat] 广播 TACZ 伤害 -> attacker=" + attacker.getName()
                 + ", target=" + target.getType() + "(" + target.getUniqueId() + ")"
                 + ", damage=" + String.format("%.2f", damage)
                 + ", headshot=" + headShot);
@@ -288,6 +301,6 @@ public final class TaczCombatBridge {
             }
             current = current.getSuperclass();
         }
-        plugin.getLogger().info(sb.toString());
+        xuanmo.arcartxsuite.module.AxsLog.logger().info(sb.toString());
     }
 }

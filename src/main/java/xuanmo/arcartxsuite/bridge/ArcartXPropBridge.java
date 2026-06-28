@@ -119,7 +119,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             available = true;
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("初始化 ArcartX Prop ArcartX API 桥接失败: " + describeThrowable(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 ArcartX Prop ArcartX API 桥接失败: " + describeThrowable(exception));
             return false;
         }
     }
@@ -178,7 +178,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             keyCallbackKeepAlive.put(bindingId, callback);
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("注册 ArcartX 客户端按键失败(" + bindingId + "): " + describeThrowable(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("注册 ArcartX 客户端按键失败(" + bindingId + "): " + describeThrowable(exception));
             return false;
         }
     }
@@ -191,7 +191,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
         try {
             unregisterClientKeyBindMethod.invoke(keyBindRegistry, bindingId);
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("注销 ArcartX 客户端按键失败(" + bindingId + "): " + describeThrowable(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("注销 ArcartX 客户端按键失败(" + bindingId + "): " + describeThrowable(exception));
         } finally {
             keyCallbackKeepAlive.remove(bindingId);
         }
@@ -210,7 +210,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             }
             return handle == null ? Optional.empty() : Optional.of(new PlayerHandle(handle));
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("获取 ArcartXPlayer 失败(" + player.getName() + "): " + describeThrowable(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("获取 ArcartXPlayer 失败(" + player.getName() + "): " + describeThrowable(exception));
             return Optional.empty();
         }
     }
@@ -223,7 +223,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             Object raw = itemGetTagMethod.invoke(null, itemStack, key);
             return raw instanceof String value ? safe(value) : "";
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("读取 ArcartX ItemStack 标签失败(" + key + "): " + describeThrowable(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("读取 ArcartX ItemStack 标签失败(" + key + "): " + describeThrowable(exception));
             return "";
         }
     }
@@ -235,7 +235,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
         try {
             itemSetCoolDownTagMethod.invoke(null, itemStack, safe(coolDownGroup));
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("写入 ArcartX 冷却标签失败: " + describeThrowable(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("写入 ArcartX 冷却标签失败: " + describeThrowable(exception));
         }
     }
 
@@ -247,7 +247,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             Object raw = itemGetCooldownTagMethod.invoke(null, itemStack);
             return raw instanceof String value ? safe(value) : "";
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("读取 ArcartX 冷却标签失败: " + describeThrowable(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("读取 ArcartX 冷却标签失败: " + describeThrowable(exception));
             return "";
         }
     }
@@ -325,7 +325,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
                 Object raw = playerGetSlotItemStackMethod.invoke(handle, safe(slotId));
                 return raw instanceof ItemStack itemStack ? itemStack : null;
             } catch (ReflectiveOperationException exception) {
-                plugin.getLogger().warning("读取 ArcartX 额外槽位失败(" + slotId + "): " + describeThrowable(exception));
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("读取 ArcartX 额外槽位失败(" + slotId + "): " + describeThrowable(exception));
                 return null;
             }
         }
@@ -334,7 +334,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             try {
                 playerSetSlotItemStackMethod.invoke(handle, safe(slotId), itemStack);
             } catch (ReflectiveOperationException exception) {
-                plugin.getLogger().warning("写入 ArcartX 额外槽位失败(" + slotId + "): " + describeThrowable(exception));
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("写入 ArcartX 额外槽位失败(" + slotId + "): " + describeThrowable(exception));
             }
         }
 
@@ -345,7 +345,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             try {
                 playerRemoveSlotItemStackOnlyClientMethod.invoke(handle, safe(slotPrefix), recursive);
             } catch (ReflectiveOperationException exception) {
-                plugin.getLogger().warning("清理 ArcartX 客户端额外槽位失败(" + slotPrefix + "): " + describeThrowable(exception));
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("清理 ArcartX 客户端额外槽位失败(" + slotPrefix + "): " + describeThrowable(exception));
             }
         }
 
@@ -353,7 +353,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             try {
                 playerSetTagCooldownMethod.invoke(handle, safe(tag), Math.max(0L, cooldownMillis));
             } catch (ReflectiveOperationException exception) {
-                plugin.getLogger().warning("设置 ArcartX 冷却失败(" + tag + "): " + describeThrowable(exception));
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("设置 ArcartX 冷却失败(" + tag + "): " + describeThrowable(exception));
             }
         }
 
@@ -362,7 +362,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
                 Object raw = playerGetTagCooldownMethod.invoke(handle, safe(tag));
                 return raw instanceof Number number ? Math.max(0L, number.longValue()) : 0L;
             } catch (ReflectiveOperationException exception) {
-                plugin.getLogger().warning("读取 ArcartX 冷却失败(" + tag + "): " + describeThrowable(exception));
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("读取 ArcartX 冷却失败(" + tag + "): " + describeThrowable(exception));
                 return 0L;
             }
         }
@@ -371,7 +371,7 @@ public final class ArcartXPropBridge implements xuanmo.arcartxsuite.api.bridge.P
             try {
                 playerSyncSlotCacheToClientMethod.invoke(handle);
             } catch (ReflectiveOperationException exception) {
-                plugin.getLogger().warning("同步 ArcartX 槽位缓存失败: " + describeThrowable(exception));
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("同步 ArcartX 槽位缓存失败: " + describeThrowable(exception));
             }
         }
     }

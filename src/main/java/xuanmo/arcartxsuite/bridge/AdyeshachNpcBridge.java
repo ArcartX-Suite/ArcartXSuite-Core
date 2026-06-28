@@ -125,7 +125,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             available = true;
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("初始化 Adyeshach NPC 桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 Adyeshach NPC 桥接失败: " + exception.getMessage());
             return false;
         }
     }
@@ -290,7 +290,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             Class<?> eventClass = Class.forName(
                 "ink.ptms.adyeshach.core.event.AdyeshachEntityVisibleEvent", true, classLoader);
             if (!Event.class.isAssignableFrom(eventClass)) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: AdyeshachEntityVisibleEvent 不是 Bukkit Event，无法注册监听器。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: AdyeshachEntityVisibleEvent 不是 Bukkit Event，无法注册监听器。");
                 return false;
             }
             adyVisibleEventGetEntityMethod = eventClass.getMethod("getEntity");
@@ -311,11 +311,11 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                 plugin
             );
             if (debug) {
-                plugin.getLogger().info("AdyeshachNpcBridge: 已注册 AdyeshachEntityVisibleEvent 监听器。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: 已注册 AdyeshachEntityVisibleEvent 监听器。");
             }
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: 注册 AdyeshachEntityVisibleEvent 监听器失败 - "
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 注册 AdyeshachEntityVisibleEvent 监听器失败 - "
                 + describeException(exception));
             unregisterVisibleHandler();
             return false;
@@ -358,7 +358,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             handler.accept(viewer, entity);
         } catch (ReflectiveOperationException | RuntimeException exception) {
             if (debug) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: 处理 AdyeshachEntityVisibleEvent 失败 - "
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 处理 AdyeshachEntityVisibleEvent 失败 - "
                     + describeException(exception));
             }
         }
@@ -378,40 +378,40 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
     @Override
     public Object spawnPrivateMarker(Player player, String markerId, Location location) {
         if (!available || player == null || markerId == null || location == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: spawnPrivateMarker 前置检查失败 available=" + available);
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: spawnPrivateMarker 前置检查失败 available=" + available);
             return null;
         }
         ensurePrivateEntityApi();
         if (getPrivateTempManagerMethod == null || playerEntityType == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: spawnPrivateMarker API 未就绪 manager=" 
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: spawnPrivateMarker API 未就绪 manager=" 
                 + (getPrivateTempManagerMethod != null) + " entityType=" + (playerEntityType != null));
             return null;
         }
         try {
             Object privateTempManager = getPrivateTempManagerMethod.invoke(apiInstance, player);
             if (privateTempManager == null) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: getPrivateTempManager 返回 null, player=" + player.getName());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: getPrivateTempManager 返回 null, player=" + player.getName());
                 return null;
             }
             // 延迟查找 create 方法（初始化时可能因无在线玩家而无法获取 manager 实例）
             if (managerCreateMethod == null) {
                 managerCreateMethod = findCreateMethod(privateTempManager);
                 if (managerCreateMethod == null) {
-                    plugin.getLogger().warning("AdyeshachNpcBridge: 无法在 " + privateTempManager.getClass().getName()
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 无法在 " + privateTempManager.getClass().getName()
                         + " 上找到 create(EntityTypes, Location) 方法");
                     return null;
                 }
-                if (debug) plugin.getLogger().info("AdyeshachNpcBridge: 延迟发现 create 方法: " + managerCreateMethod);
+                if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: 延迟发现 create 方法: " + managerCreateMethod);
             }
-            if (debug) plugin.getLogger().info("AdyeshachNpcBridge: spawnPrivateMarker manager=" 
+            if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: spawnPrivateMarker manager=" 
                 + privateTempManager.getClass().getSimpleName() + " entityType=" + playerEntityType 
                 + " loc=" + location);
             Object entity = managerCreateMethod.invoke(privateTempManager, playerEntityType, location);
             if (entity == null) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: manager.create() 返回 null");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: manager.create() 返回 null");
                 return null;
             }
-            if (debug) plugin.getLogger().info("AdyeshachNpcBridge: 实体已创建 class=" + entity.getClass().getSimpleName());
+            if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: 实体已创建 class=" + entity.getClass().getSimpleName());
             // 设置隐身（隐藏原版实体模型）
             try {
                 if (entitySetVisibleMethod == null) {
@@ -444,7 +444,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                     resolveCompatibleMethod(setNameVisibleMethod, entity).invoke(entity, false);
                 }
             } catch (Exception e) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: 隐藏名称失败 - " + e.getMessage());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 隐藏名称失败 - " + e.getMessage());
             }
             // 设置无碰撞元数据（ArmorStand marker 模式：无碰撞体积）
             try {
@@ -472,7 +472,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             privateMarkerEntities.put(markerKey(player, markerId), entity);
             return entity;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: spawnPrivateMarker 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: spawnPrivateMarker 失败 - " + describeException(exception));
             return null;
         }
     }
@@ -498,7 +498,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                 return true;
             }
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: teleportMarker 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: teleportMarker 失败 - " + describeException(exception));
         }
         return false;
     }
@@ -559,7 +559,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                 }
             }
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: deleteEntity 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: deleteEntity 失败 - " + describeException(exception));
         }
         return false;
     }
@@ -579,7 +579,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
 
             getPrivateTempManagerMethod = findMethod(adyApiClass, "getEntityManagerPrivateTemporary", Player.class);
             if (getPrivateTempManagerMethod == null) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: 未找到 getEntityManagerPrivateTemporary(Player)");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 未找到 getEntityManagerPrivateTemporary(Player)");
                 return;
             }
 
@@ -606,7 +606,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                 }
             }
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: 初始化私有实体 API 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 初始化私有实体 API 失败 - " + describeException(exception));
             getPrivateTempManagerMethod = null;
         }
     }
@@ -629,7 +629,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             }
         }
         if (bestMatch != null) {
-            if (debug) plugin.getLogger().info("AdyeshachNpcBridge: 找到 create 方法: " + bestMatch
+            if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: 找到 create 方法: " + bestMatch
                 + " param0=" + bestMatch.getParameterTypes()[0].getName()
                 + " param1=" + bestMatch.getParameterTypes()[1].getName());
             // 用方法参数的 EntityTypes 类重新创建枚举值，确保 classloader 一致
@@ -637,18 +637,18 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             if (methodEntityTypesClass.isEnum()) {
                 try {
                     playerEntityType = Enum.valueOf((Class<Enum>) methodEntityTypesClass, "ARMOR_STAND");
-                    if (debug) plugin.getLogger().info("AdyeshachNpcBridge: 用方法参数类型重建 ARMOR_STAND 枚举值成功"
+                    if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: 用方法参数类型重建 ARMOR_STAND 枚举值成功"
                         + " class=" + methodEntityTypesClass.getName());
                 } catch (IllegalArgumentException ex) {
-                    plugin.getLogger().warning("AdyeshachNpcBridge: 无法在 " 
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 无法在 " 
                         + methodEntityTypesClass.getName() + " 中找到 ARMOR_STAND 枚举值");
                 }
             }
         } else {
-            plugin.getLogger().warning("AdyeshachNpcBridge: manager 上找不到 create(?, Location) 方法");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: manager 上找不到 create(?, Location) 方法");
             for (Method method : manager.getClass().getMethods()) {
                 if (!method.getDeclaringClass().equals(Object.class)) {
-                    plugin.getLogger().warning("  - " + method.getName() + "("
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("  - " + method.getName() + "("
                         + java.util.Arrays.stream(method.getParameterTypes())
                             .map(Class::getSimpleName).collect(java.util.stream.Collectors.joining(", ")) + ")");
                 }
@@ -699,7 +699,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                     invokeOrThrow(axEntitySetModelMethod, axEntity, modelId, scale);
                     return true;
                 } catch (Exception exception) {
-                    plugin.getLogger().warning("AdyeshachNpcBridge: setModel(Bukkit Entity 路径) 失败 - " + exception.getMessage());
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: setModel(Bukkit Entity 路径) 失败 - " + exception.getMessage());
                 }
             }
         }
@@ -714,17 +714,17 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
     private boolean broadcastApplyModel(Object adyeshachEntity, String modelId, double scale) {
         UUID entityUUID = getAdyEntityUUID(adyeshachEntity);
         if (entityUUID == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: 无法获取 Adyeshach 实体 UUID，无法广播模型。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 无法获取 Adyeshach 实体 UUID，无法广播模型。");
             return false;
         }
         ensureNetworkSenderBridge();
         if (networkSendSetEntityModelMethod == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: ArcartXNetworkSender.sendSetEntityModel 不可用，无法应用模型。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: ArcartXNetworkSender.sendSetEntityModel 不可用，无法应用模型。");
             return false;
         }
         List<Player> viewers = collectVisibleViewers(adyeshachEntity);
         if (viewers.isEmpty()) {
-            if (debug) plugin.getLogger().info("AdyeshachNpcBridge: broadcastApplyModel UUID=" + entityUUID
+            if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: broadcastApplyModel UUID=" + entityUUID
                 + " 当前没有看见该实体的在线玩家，跳过广播。");
             // 没有可视玩家不算失败：reload 时可能尚无玩家在视野内
             return true;
@@ -735,11 +735,11 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                 networkSendSetEntityModelMethod.invoke(arcartXNetworkSender, player, entityUUID, modelId, scale);
                 success++;
             } catch (ReflectiveOperationException | RuntimeException exception) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: sendSetEntityModel(" + player.getName()
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: sendSetEntityModel(" + player.getName()
                     + ") 失败 - " + describeException(exception));
             }
         }
-        if (debug) plugin.getLogger().info("AdyeshachNpcBridge: broadcastApplyModel UUID=" + entityUUID
+        if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: broadcastApplyModel UUID=" + entityUUID
             + " model=" + modelId + " success=" + success + "/" + viewers.size());
         return success > 0;
     }
@@ -757,29 +757,29 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
     @Override
     public boolean applyModelForPlayer(Player player, Object adyeshachEntity, String modelId, double scale) {
         if (!available || player == null || adyeshachEntity == null || modelId == null || modelId.isBlank()) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: applyModelForPlayer 参数无效 available=" + available
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: applyModelForPlayer 参数无效 available=" + available
                 + " entity=" + (adyeshachEntity != null) + " model=" + modelId);
             return false;
         }
         UUID entityUUID = getAdyEntityUUID(adyeshachEntity);
         if (entityUUID == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: applyModelForPlayer - 无法获取实体 UUID，回退到标准路径");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: applyModelForPlayer - 无法获取实体 UUID，回退到标准路径");
             return applyModel(adyeshachEntity, modelId, scale);
         }
-        if (debug) plugin.getLogger().info("AdyeshachNpcBridge: applyModelForPlayer UUID=" + entityUUID
+        if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: applyModelForPlayer UUID=" + entityUUID
             + " model=" + modelId + " scale=" + scale);
         ensureNetworkSenderBridge();
         if (networkSendSetEntityModelMethod == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: NetworkSender.sendSetEntityModel 方法未找到，回退到标准路径");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: NetworkSender.sendSetEntityModel 方法未找到，回退到标准路径");
             return applyModel(adyeshachEntity, modelId, scale);
         }
         try {
-            if (debug) plugin.getLogger().info("AdyeshachNpcBridge: 调用 sendSetEntityModel player=" + player.getName()
+            if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: 调用 sendSetEntityModel player=" + player.getName()
                 + " UUID=" + entityUUID + " model=" + modelId);
             networkSendSetEntityModelMethod.invoke(arcartXNetworkSender, player, entityUUID, modelId, scale);
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: applyModelForPlayer 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: applyModelForPlayer 失败 - " + describeException(exception));
             return false;
         }
     }
@@ -804,7 +804,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             networkSendSetEntityAnimationMethod.invoke(arcartXNetworkSender, player, entityUUID, animation, speed, transitionTime, keepTime);
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: applyAnimationForPlayer 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: applyAnimationForPlayer 失败 - " + describeException(exception));
             return false;
         }
     }
@@ -831,7 +831,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             networkSendSetEntityAnimationMethod.invoke(arcartXNetworkSender, player, entityUUID, animName, 1.0, 0, -1L);
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: applyDefaultStateForPlayer 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: applyDefaultStateForPlayer 失败 - " + describeException(exception));
             return false;
         }
     }
@@ -857,12 +857,12 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             // ArcartXAPI.getNetworkSender()
             Method getNetworkSenderMethod = findMethod(apiClass, "getNetworkSender");
             if (getNetworkSenderMethod == null) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: ArcartXAPI 未提供 getNetworkSender() 方法。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: ArcartXAPI 未提供 getNetworkSender() 方法。");
                 return;
             }
             arcartXNetworkSender = getNetworkSenderMethod.invoke(null);
             if (arcartXNetworkSender == null) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: ArcartXAPI.getNetworkSender() 返回 null。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: ArcartXAPI.getNetworkSender() 返回 null。");
                 return;
             }
 
@@ -882,12 +882,12 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             }
 
             if (networkSendSetEntityModelMethod != null) {
-                plugin.getLogger().fine("AdyeshachNpcBridge: NetworkSender bridge 已就绪 (sendSetEntityModel)");
+                xuanmo.arcartxsuite.module.AxsLog.logger().fine("AdyeshachNpcBridge: NetworkSender bridge 已就绪 (sendSetEntityModel)");
             } else {
-                plugin.getLogger().warning("AdyeshachNpcBridge: ArcartXNetworkSender 未提供 sendSetEntityModel(Player,UUID,String,double) 方法。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: ArcartXNetworkSender 未提供 sendSetEntityModel(Player,UUID,String,double) 方法。");
             }
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: 初始化 NetworkSender bridge 失败 - " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 初始化 NetworkSender bridge 失败 - " + describeException(exception));
         }
     }
 
@@ -920,7 +920,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                     invokeOrThrow(axEntityPlayAnimationMethod, axEntity, animation, speed, transitionTime, keepTime);
                     return true;
                 } catch (Exception exception) {
-                    plugin.getLogger().warning("AdyeshachNpcBridge: playAnimation(Bukkit Entity 路径) 失败 - " + exception.getMessage());
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: playAnimation(Bukkit Entity 路径) 失败 - " + exception.getMessage());
                 }
             }
         }
@@ -931,17 +931,17 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
     private boolean broadcastApplyAnimation(Object adyeshachEntity, String animation, double speed, int transitionTime, long keepTime) {
         UUID entityUUID = getAdyEntityUUID(adyeshachEntity);
         if (entityUUID == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: 无法获取 Adyeshach 实体 UUID，无法广播动画。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 无法获取 Adyeshach 实体 UUID，无法广播动画。");
             return false;
         }
         ensureNetworkSenderBridge();
         if (networkSendSetEntityAnimationMethod == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: ArcartXNetworkSender.sendSetEntityAnimation 不可用，无法播放动画。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: ArcartXNetworkSender.sendSetEntityAnimation 不可用，无法播放动画。");
             return false;
         }
         List<Player> viewers = collectVisibleViewers(adyeshachEntity);
         if (viewers.isEmpty()) {
-            if (debug) plugin.getLogger().info("AdyeshachNpcBridge: broadcastApplyAnimation UUID=" + entityUUID
+            if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: broadcastApplyAnimation UUID=" + entityUUID
                 + " 当前没有看见该实体的在线玩家，跳过广播。");
             return true;
         }
@@ -952,11 +952,11 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                     animation, speed, transitionTime, keepTime);
                 success++;
             } catch (ReflectiveOperationException | RuntimeException exception) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: sendSetEntityAnimation(" + player.getName()
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: sendSetEntityAnimation(" + player.getName()
                     + ") 失败 - " + describeException(exception));
             }
         }
-        if (debug) plugin.getLogger().info("AdyeshachNpcBridge: broadcastApplyAnimation UUID=" + entityUUID
+        if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: broadcastApplyAnimation UUID=" + entityUUID
             + " animation=" + animation + " success=" + success + "/" + viewers.size());
         return success > 0;
     }
@@ -987,7 +987,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                     invokeOrThrow(axEntitySetDefaultStateMethod, axEntity, state, animName);
                     return true;
                 } catch (Exception exception) {
-                    plugin.getLogger().warning("AdyeshachNpcBridge: setDefaultState(Bukkit Entity 路径) 失败 - " + exception.getMessage());
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: setDefaultState(Bukkit Entity 路径) 失败 - " + exception.getMessage());
                 }
             }
         }
@@ -998,17 +998,17 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
     private boolean broadcastApplyDefaultState(Object adyeshachEntity, String state, String animName) {
         UUID entityUUID = getAdyEntityUUID(adyeshachEntity);
         if (entityUUID == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: 无法获取 Adyeshach 实体 UUID，无法广播默认状态。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 无法获取 Adyeshach 实体 UUID，无法广播默认状态。");
             return false;
         }
         ensureNetworkSenderBridge();
         if (networkSendSetEntityAnimationMethod == null) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: ArcartXNetworkSender.sendSetEntityAnimation 不可用，无法应用默认状态。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: ArcartXNetworkSender.sendSetEntityAnimation 不可用，无法应用默认状态。");
             return false;
         }
         List<Player> viewers = collectVisibleViewers(adyeshachEntity);
         if (viewers.isEmpty()) {
-            if (debug) plugin.getLogger().info("AdyeshachNpcBridge: broadcastApplyDefaultState UUID=" + entityUUID
+            if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: broadcastApplyDefaultState UUID=" + entityUUID
                 + " 当前没有看见该实体的在线玩家，跳过广播。");
             return true;
         }
@@ -1020,11 +1020,11 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
                     animName, 1.0, 0, -1L);
                 success++;
             } catch (ReflectiveOperationException | RuntimeException exception) {
-                plugin.getLogger().warning("AdyeshachNpcBridge: sendSetEntityAnimation(default state, "
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: sendSetEntityAnimation(default state, "
                     + player.getName() + ") 失败 - " + describeException(exception));
             }
         }
-        if (debug) plugin.getLogger().info("AdyeshachNpcBridge: broadcastApplyDefaultState UUID=" + entityUUID
+        if (debug) xuanmo.arcartxsuite.module.AxsLog.logger().info("AdyeshachNpcBridge: broadcastApplyDefaultState UUID=" + entityUUID
             + " state=" + state + " anim=" + animName + " success=" + success + "/" + viewers.size());
         return success > 0;
     }
@@ -1044,7 +1044,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             arcartXEntityManager = apiClass.getMethod(ARCARTX_GET_ENTITY_MANAGER).invoke(null);
             getOrCreateEntityMethod = findMethod(entityManagerClass, ARCARTX_GET_OR_CREATE_ENTITY, Entity.class);
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("AdyeshachNpcBridge: 初始化 ArcartXEntityManager 失败 - " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 初始化 ArcartXEntityManager 失败 - " + exception.getMessage());
         }
     }
 
@@ -1127,7 +1127,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             } catch (ReflectiveOperationException | RuntimeException ignored) {
             }
         }
-        plugin.getLogger().warning("AdyeshachNpcBridge: 无法获取实体 UUID (class=" + adyeshachEntity.getClass().getName() + ")");
+        xuanmo.arcartxsuite.module.AxsLog.logger().warning("AdyeshachNpcBridge: 无法获取实体 UUID (class=" + adyeshachEntity.getClass().getName() + ")");
         return null;
     }
 
@@ -1297,7 +1297,7 @@ public final class AdyeshachNpcBridge implements xuanmo.arcartxsuite.api.bridge.
             return;
         }
         nextReflectionWarningAtMs = now + REFLECTION_WARNING_INTERVAL_MS;
-        plugin.getLogger().warning(
+        xuanmo.arcartxsuite.module.AxsLog.logger().warning(
             "Adyeshach NPC 反射失败("
                 + action
                 + "): "

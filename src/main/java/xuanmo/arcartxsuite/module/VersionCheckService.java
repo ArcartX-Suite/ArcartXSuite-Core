@@ -41,7 +41,9 @@ public final class VersionCheckService implements Listener {
 
     public VersionCheckService(JavaPlugin plugin) {
         this.plugin = plugin;
-        this.logger = plugin.getLogger();
+        // 用统一前缀 logger（◆ ArcartXSuite | ...），与其余子系统/模块输出保持一致，
+        // 而非 Bukkit 默认的 [ArcartX-Suite] 前缀。
+        this.logger = new PluginConsoleLogger("AXS-VersionCheck", null);
         this.currentVersion = plugin.getDescription().getVersion();
         this.verifyKey = loadPublicKey(plugin.getConfig().getString("version-check-public-key", ""));
     }

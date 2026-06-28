@@ -48,7 +48,7 @@ public final class ChatSignBypassService implements Listener {
     public ChatSignBypassService(JavaPlugin plugin, boolean enabled,
                                  boolean onlyForNonPremium, AccountTypeService accountTypeService) {
         this.plugin = plugin;
-        this.logger = plugin.getLogger();
+        this.logger = xuanmo.arcartxsuite.module.AxsLog.logger();
         this.enabled = enabled;
         this.onlyForNonPremium = onlyForNonPremium;
         this.accountTypeService = accountTypeService;

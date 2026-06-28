@@ -45,7 +45,7 @@ public final class OvertureItemBridge {
             getItemIdsMethod = apiClass.getMethod("getItemIds");
             available = true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("初始化 Overture 物品桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 Overture 物品桥接失败: " + exception.getMessage());
         }
     }
 

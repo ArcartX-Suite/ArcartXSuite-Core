@@ -1,5 +1,10 @@
 config-version: 2
 
+# 模块签名验证公钥（Ed25519，Base64）。留空表示关闭。
+module-signature-public-keys: []
+# 版本检查响应签名公钥。留空表示不校验。
+version-check-public-key: ""
+
 # ========== 全局货币定义 ==========
 currencies:
   money:

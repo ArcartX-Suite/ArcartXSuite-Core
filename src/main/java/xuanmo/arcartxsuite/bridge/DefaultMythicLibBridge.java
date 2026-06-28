@@ -102,9 +102,9 @@ public final class DefaultMythicLibBridge implements MythicLibBridge {
             }
 
             available = true;
-            plugin.getLogger().fine("[MythicLib] 桥接初始化成功");
+            xuanmo.arcartxsuite.module.AxsLog.logger().fine("[MythicLib] 桥接初始化成功");
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[MythicLib] 桥接初始化失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[MythicLib] 桥接初始化失败: " + exception.getMessage());
             reset();
         }
     }
@@ -142,7 +142,7 @@ public final class DefaultMythicLibBridge implements MythicLibBridge {
             statModifierRegisterMethod.invoke(modifier, playerData);
             return modifier;
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[MythicLib] registerStatModifier 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[MythicLib] registerStatModifier 失败: " + e.getMessage());
             return null;
         }
     }
@@ -154,7 +154,7 @@ public final class DefaultMythicLibBridge implements MythicLibBridge {
             Object instance = statMapGetInstanceMethod.invoke(statMap, statId);
             if (instance != null) { statInstanceRemoveMethod.invoke(instance, modifierName); }
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[MythicLib] removeStatModifier 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[MythicLib] removeStatModifier 失败: " + e.getMessage());
         }
     }
 
@@ -162,7 +162,7 @@ public final class DefaultMythicLibBridge implements MythicLibBridge {
     public void updateStat(Object statMap, String statId) {
         if (!available || statMap == null) return;
         try { statMapUpdateMethod.invoke(statMap, statId); } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[MythicLib] updateStat 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[MythicLib] updateStat 失败: " + e.getMessage());
         }
     }
 
@@ -176,7 +176,7 @@ public final class DefaultMythicLibBridge implements MythicLibBridge {
             tempModifierRegisterMethod.invoke(handle, playerData, durationMillis);
             return handle;
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[MythicLib] registerTemporaryModifier 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[MythicLib] registerTemporaryModifier 失败: " + e.getMessage());
             return null;
         }
     }
@@ -185,7 +185,7 @@ public final class DefaultMythicLibBridge implements MythicLibBridge {
     public void closeTemporaryModifier(Object handle) {
         if (!available || handle == null || tempModifierCloseMethod == null) return;
         try { tempModifierCloseMethod.invoke(handle); } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[MythicLib] closeTemporaryModifier 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[MythicLib] closeTemporaryModifier 失败: " + e.getMessage());
         }
     }
 

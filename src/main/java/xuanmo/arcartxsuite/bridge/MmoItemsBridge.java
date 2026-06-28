@@ -59,7 +59,7 @@ public final class MmoItemsBridge {
             itemRegistryGetMmoItemMethod = findMethod(itemRegistry.getClass(), "getMMOItem", 3);
             available = typeRegistryGetMethod != null && (itemRegistryGetItemMethod != null || itemRegistryGetMmoItemMethod != null);
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("初始化 MMOItems 物品桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 MMOItems 物品桥接失败: " + exception.getMessage());
         }
     }
 

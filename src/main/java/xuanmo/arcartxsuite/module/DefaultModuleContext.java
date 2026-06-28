@@ -110,25 +110,13 @@ final class DefaultModuleContext implements ModuleContext {
     }
 
     private static PlaceholderExpansionRegistry resolveExpansionRegistry(Logger logger) {
-        try {
-            // 先检测 PAPI 是否存在
-            Class.forName("me.clip.placeholderapi.expansion.PlaceholderExpansion");
-            // 通过反射实例化 DirectPlaceholderExpansionRegistry，避免 PAPI 缺失时
-            // 直接引用该类导致 NoClassDefFoundError（该类强引用 PlaceholderExpansion）
-            Class<?> directRegistry = Class.forName(
-                "xuanmo.arcartxsuite.placeholder.DirectPlaceholderExpansionRegistry"
-            );
-            PlaceholderExpansionRegistry registry = (PlaceholderExpansionRegistry)
-                directRegistry.getConstructor(Logger.class).newInstance(logger);
-            return registry;
-        } catch (ClassNotFoundException e) {
-            logger.info("PlaceholderAPI 未安装，使用反射实现的 PlaceholderExpansionRegistry。");
-            return new xuanmo.arcartxsuite.placeholder.DefaultPlaceholderExpansionRegistry(logger);
-        } catch (ReflectiveOperationException e) {
-            logger.warning("DirectPlaceholderExpansionRegistry 反射实例化失败: " + e.getMessage()
-                + "，回退到反射实现。");
-            return new xuanmo.arcartxsuite.placeholder.DefaultPlaceholderExpansionRegistry(logger);
+        org.bukkit.plugin.Plugin papi = org.bukkit.Bukkit.getPluginManager().getPlugin("PlaceholderAPI");
+        if (papi != null && papi.isEnabled()) {
+            logger.fine("检测到 PlaceholderAPI，启用占位符扩展注册。");
+        } else {
+            logger.fine("未检测到 PlaceholderAPI，占位符扩展将不会注册。");
         }
+        return new xuanmo.arcartxsuite.placeholder.DefaultPlaceholderExpansionRegistry(logger);
     }
 
     @Override

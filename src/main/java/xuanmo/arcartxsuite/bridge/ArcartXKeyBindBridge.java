@@ -61,7 +61,7 @@ public final class ArcartXKeyBindBridge {
             available = true;
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("初始化 ArcartX KeyBind 桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 ArcartX KeyBind 桥接失败: " + exception.getMessage());
             return false;
         }
     }
@@ -99,7 +99,7 @@ public final class ArcartXKeyBindBridge {
             String message = cause == null || cause.getMessage() == null || cause.getMessage().isBlank()
                 ? exception.getClass().getSimpleName()
                 : cause.getClass().getSimpleName() + ": " + cause.getMessage();
-            plugin.getLogger().warning("ArcartX KeyBind 调用失败: " + message);
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX KeyBind 调用失败: " + message);
             return false;
         }
     }

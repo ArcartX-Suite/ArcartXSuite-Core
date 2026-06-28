@@ -53,9 +53,9 @@ public final class DefaultAriaBridge implements AriaBridge {
             Object versionValue = versionGetter.invoke(managerInstance);
             version = versionValue == null ? null : String.valueOf(versionValue);
             available = true;
-            plugin.getLogger().fine("[Aria] 桥接初始化成功 (v" + (version == null ? "?" : version) + ")");
+            xuanmo.arcartxsuite.module.AxsLog.logger().fine("[Aria] 桥接初始化成功 (v" + (version == null ? "?" : version) + ")");
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[Aria] 桥接初始化失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Aria] 桥接初始化失败: " + exception.getMessage());
             reset();
         }
     }
@@ -78,7 +78,7 @@ public final class DefaultAriaBridge implements AriaBridge {
         try {
             return evalMethod.invoke(managerInstance, code, bindings);
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().fine("[Aria] eval 失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().fine("[Aria] eval 失败: " + exception.getMessage());
             return null;
         }
     }

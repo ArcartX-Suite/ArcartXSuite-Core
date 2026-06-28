@@ -51,11 +51,11 @@ public final class KeybindService {
     public void initialize(FileConfiguration config) {
         ConfigurationSection keybindsSection = config.getConfigurationSection("keybinds");
         if (keybindsSection == null) {
-            plugin.getLogger().info("[Keybind] config.yml 未配置 keybinds 节，跳过按键注册。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().info("[Keybind] config.yml 未配置 keybinds 节，跳过按键注册。");
             return;
         }
         if (!keyBindBridge.initialize()) {
-            plugin.getLogger().warning("[Keybind] ArcartX KeyBind 桥接不可用，按键注册已跳过。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] ArcartX KeyBind 桥接不可用，按键注册已跳过。");
             return;
         }
 
@@ -68,15 +68,15 @@ public final class KeybindService {
             String defaultKey = entry.getString("default-key", "");
             String category = entry.getString("category", "ArcartXSuite");
             if (name.isBlank() || defaultKey.isBlank()) {
-                plugin.getLogger().warning("[Keybind] 跳过无效按键配置: keybinds." + key);
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] 跳过无效按键配置: keybinds." + key);
                 continue;
             }
             boolean success = keyBindBridge.registerClientKeyBind(name, category, defaultKey);
             if (success) {
                 registeredKeys.add(name);
-                plugin.getLogger().info("[Keybind] 已注册客户端按键: " + name + " (默认 " + defaultKey + ")");
+                xuanmo.arcartxsuite.module.AxsLog.logger().info("[Keybind] 已注册客户端按键: " + name + " (默认 " + defaultKey + ")");
             } else {
-                plugin.getLogger().warning("[Keybind] 注册客户端按键失败: " + name);
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] 注册客户端按键失败: " + name);
             }
         }
 
@@ -102,7 +102,7 @@ public final class KeybindService {
         unregisterClientKeyPressListener();
         Plugin arcartX = Bukkit.getPluginManager().getPlugin("ArcartX");
         if (arcartX == null) {
-            plugin.getLogger().warning("[Keybind] ArcartX 未加载，ClientKeyPressEvent 监听未注册。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] ArcartX 未加载，ClientKeyPressEvent 监听未注册。");
             return;
         }
         try {
@@ -112,7 +112,7 @@ public final class KeybindService {
                 true, classLoader
             );
             if (!Event.class.isAssignableFrom(rawEventClass)) {
-                plugin.getLogger().warning("[Keybind] ClientKeyPressEvent 不是 Bukkit Event。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] ClientKeyPressEvent 不是 Bukkit Event。");
                 return;
             }
             Class<? extends Event> eventClass = (Class<? extends Event>) rawEventClass;
@@ -124,9 +124,9 @@ public final class KeybindService {
                 (listener, event) -> handleKeyPressEvent(event, rawEventClass, getPlayerMethod, getKeyNameMethod),
                 plugin, true
             );
-            plugin.getLogger().info("[Keybind] ClientKeyPressEvent 监听注册成功。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().info("[Keybind] ClientKeyPressEvent 监听注册成功。");
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[Keybind] 注册 ClientKeyPressEvent 监听失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] 注册 ClientKeyPressEvent 监听失败: " + exception.getMessage());
         }
     }
 
@@ -148,7 +148,7 @@ public final class KeybindService {
                 dispatch(player, keyName);
             }
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[Keybind] 处理 ClientKeyPressEvent 失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] 处理 ClientKeyPressEvent 失败: " + exception.getMessage());
         }
     }
 
@@ -204,7 +204,7 @@ public final class KeybindService {
                     return;
                 }
             } catch (Exception exception) {
-                plugin.getLogger().warning("[Keybind] 处理器异常 (" + keyName + "): " + exception.getMessage());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Keybind] 处理器异常 (" + keyName + "): " + exception.getMessage());
             }
         }
     }

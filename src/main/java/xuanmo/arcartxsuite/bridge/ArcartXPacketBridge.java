@@ -88,7 +88,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
 
         Plugin arcartX = plugin.getServer().getPluginManager().getPlugin("ArcartX");
         if (arcartX == null) {
-            plugin.getLogger().severe("arcartxsuite 需要 ArcartX。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().severe("arcartxsuite 需要 ArcartX。");
             return false;
         }
 
@@ -126,7 +126,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             available = true;
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().severe("初始化 ArcartX 桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().severe("初始化 ArcartX 桥接失败: " + exception.getMessage());
             return false;
         }
     }
@@ -203,7 +203,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             }
         }
 
-        plugin.getLogger().severe(
+        xuanmo.arcartxsuite.module.AxsLog.logger().severe(
             "ArcartX UI 注册失败，配置 UI 标识为 '" + configuredUiId + "'，"
                 + "导出文件为 " + uiFile.getAbsolutePath() + "，最后一次失败原因: " + lastFailure
         );
@@ -221,7 +221,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             closeCallbackRegisteredUiIds.remove(uiId);
             callbackKeepAlive.remove(uiId);
             if (!result.success() && result.exceptionThrown()) {
-                plugin.getLogger().warning("ArcartX UI 注销失败(" + uiId + "): " + result.message());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX UI 注销失败(" + uiId + "): " + result.message());
             }
             return result.success();
         } catch (ReflectiveOperationException ignored) {
@@ -276,7 +276,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
 
         Method method = findBestMethod(payload);
         if (method == null) {
-            plugin.getLogger().warning(
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(
                 "ArcartX 未找到可用于 payload 类型 " + describePayloadType(payload) + " 的 sendPacket 签名。"
             );
             return false;
@@ -289,7 +289,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             }
             return true;
         } catch (IllegalArgumentException | ReflectiveOperationException exception) {
-            plugin.getLogger().warning("ArcartX 发包失败: " + describeInvocationFailure(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX 发包失败: " + describeInvocationFailure(exception));
             return false;
         }
     }
@@ -365,7 +365,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
                     plugin.getServer().getScheduler().runTask(plugin, () -> currentCallback.accept(player));
                 }
             } catch (ReflectiveOperationException | RuntimeException exception) {
-                plugin.getLogger().warning("ArcartX UI 关闭回调处理失败(" + uiId + "): " + describeInvocationFailure(exception));
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX UI 关闭回调处理失败(" + uiId + "): " + describeInvocationFailure(exception));
             }
             return null;
         };
@@ -383,7 +383,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             return true;
         } catch (IllegalArgumentException | ReflectiveOperationException exception) {
             closeCallbacks.remove(uiId, callback);
-            plugin.getLogger().warning("注册 ArcartX UI CLOSE 回调失败(" + uiId + "): " + describeInvocationFailure(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("注册 ArcartX UI CLOSE 回调失败(" + uiId + "): " + describeInvocationFailure(exception));
             return false;
         }
     }
@@ -409,7 +409,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             sendChatCard.invoke(handler, cardId, data);
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("发送 ArcartX 聊天卡片 '" + cardId + "' 失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("发送 ArcartX 聊天卡片 '" + cardId + "' 失败: " + exception.getMessage());
             return false;
         }
     }
@@ -432,7 +432,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             );
         } catch (ReflectiveOperationException exception) {
             callbackInterface = null;
-            plugin.getLogger().warning("当前 ArcartX 未提供 UI OPEN 回调桥接，相关 HUD 将使用降级延迟发包模式。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("当前 ArcartX 未提供 UI OPEN 回调桥接，相关 HUD 将使用降级延迟发包模式。");
         }
     }
 
@@ -459,7 +459,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             closeCallbackType = null;
             uiCallbackInterface = null;
             callDataPlayerMethod = null;
-            plugin.getLogger().warning("当前 ArcartX 未提供 UI CLOSE 回调桥接，部分 Menu 生命周期将使用降级模式。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("当前 ArcartX 未提供 UI CLOSE 回调桥接，部分 Menu 生命周期将使用降级模式。");
         }
     }
 
@@ -484,7 +484,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
         if (unregisterMethod != null) {
             RegistryCallResult unregisterResult = invokeRegistryMethod(unregisterMethod, uiId);
             if (!unregisterResult.success() && unregisterResult.exceptionThrown()) {
-                plugin.getLogger().warning("ArcartX UI 注销失败(" + uiId + "): " + unregisterResult.message());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX UI 注销失败(" + uiId + "): " + unregisterResult.message());
             }
         }
 
@@ -528,11 +528,11 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
     private void logRegisteredUi(String configuredUiId, String actualUiId, File uiFile, String action) {
         successfulUiRegistrationCount++;
         if (configuredUiId != null && !configuredUiId.isBlank() && !actualUiId.equals(configuredUiId)) {
-            plugin.getLogger().warning(
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(
                 "ArcartX UI 标识 '" + configuredUiId + "' 不可用，已自动回退为 '" + actualUiId + "'。"
             );
         }
-        plugin.getLogger().fine(
+        xuanmo.arcartxsuite.module.AxsLog.logger().fine(
             "ArcartX UI 已" + ("reload".equals(action) ? "重载" : "注册")
                 + ": " + actualUiId + " <- " + uiFile.getAbsolutePath()
         );
@@ -549,7 +549,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             }
             return true;
         } catch (IllegalArgumentException | ReflectiveOperationException exception) {
-            plugin.getLogger().warning("ArcartX 桥接调用失败: " + describeInvocationFailure(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX 桥接调用失败: " + describeInvocationFailure(exception));
             return false;
         }
     }
@@ -565,7 +565,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             }
             return true;
         } catch (IllegalArgumentException | ReflectiveOperationException exception) {
-            plugin.getLogger().warning("ArcartX unsafe 桥接调用失败(" + action + "): " + describeInvocationFailure(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX unsafe 桥接调用失败(" + action + "): " + describeInvocationFailure(exception));
             return false;
         }
     }
@@ -609,7 +609,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             return true;
         } catch (IllegalArgumentException | ReflectiveOperationException exception) {
             oneShotCallbacks.remove(proxy);
-            plugin.getLogger().warning("ArcartX 打开 UI 回调桥接调用失败(" + action + "): " + describeInvocationFailure(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX 打开 UI 回调桥接调用失败(" + action + "): " + describeInvocationFailure(exception));
             return false;
         }
     }
@@ -650,7 +650,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             return;
         }
 
-        plugin.getLogger().warning(
+        xuanmo.arcartxsuite.module.AxsLog.logger().warning(
             "当前 ArcartX 未提供 " + methodName + "，Conversation 将回退到普通 UIRegistry 调用。"
         );
         unsafeFallbackWarned = true;
@@ -661,7 +661,7 @@ public final class ArcartXPacketBridge implements PacketBridgeAPI {
             return;
         }
 
-        plugin.getLogger().warning(
+        xuanmo.arcartxsuite.module.AxsLog.logger().warning(
             "当前 ArcartX 未提供 " + methodName + "(Player,String,CallBack)，相关 HUD 将回退到延迟发包模式。"
         );
         openCallbackFallbackWarned = true;

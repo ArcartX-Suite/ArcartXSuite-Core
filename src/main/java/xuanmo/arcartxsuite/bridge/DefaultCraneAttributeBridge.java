@@ -42,7 +42,7 @@ public final class DefaultCraneAttributeBridge implements CraneAttributeBridge {
             Class<?> apiClass = Class.forName(API_CLASS_NAME, true, craneAttribute.getClass().getClassLoader());
             getAttrDataMethod = findGetAttrDataMethod(apiClass);
             if (getAttrDataMethod == null) {
-                plugin.getLogger().fine("[CraneAttribute] 未找到 getAttrData 方法");
+                xuanmo.arcartxsuite.module.AxsLog.logger().fine("[CraneAttribute] 未找到 getAttrData 方法");
                 reset();
                 return;
             }
@@ -54,15 +54,15 @@ public final class DefaultCraneAttributeBridge implements CraneAttributeBridge {
             updateAttributeMethod = findUpdateAttribute(apiClass);
 
             if ((addAttributeSourceMethod == null && addStaticAttributeSourceMethod == null) || removeAttributeSourceMethod == null || updateAttributeMethod == null) {
-                plugin.getLogger().fine("[CraneAttribute] 部分关键方法未找到");
+                xuanmo.arcartxsuite.module.AxsLog.logger().fine("[CraneAttribute] 部分关键方法未找到");
                 reset();
                 return;
             }
 
             available = true;
-            plugin.getLogger().fine("[CraneAttribute] 桥接初始化成功");
+            xuanmo.arcartxsuite.module.AxsLog.logger().fine("[CraneAttribute] 桥接初始化成功");
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[CraneAttribute] 桥接初始化失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CraneAttribute] 桥接初始化失败: " + exception.getMessage());
             reset();
         }
     }
@@ -83,7 +83,7 @@ public final class DefaultCraneAttributeBridge implements CraneAttributeBridge {
                 addAttributeSourceMethod.invoke(null, attrData, sourceName, List.copyOf(lines));
             }
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[CraneAttribute] addSource 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CraneAttribute] addSource 失败: " + e.getMessage());
         }
     }
 
@@ -97,7 +97,7 @@ public final class DefaultCraneAttributeBridge implements CraneAttributeBridge {
                 addAttributeSourceMethod.invoke(null, attrData, sourceName, List.copyOf(lines));
             }
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[CraneAttribute] addStaticSource 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CraneAttribute] addStaticSource 失败: " + e.getMessage());
         }
     }
 
@@ -107,7 +107,7 @@ public final class DefaultCraneAttributeBridge implements CraneAttributeBridge {
     public void removeSource(Object attrData, String sourceName) {
         if (!available || attrData == null || sourceName == null) return;
         try { removeAttributeSourceMethod.invoke(null, attrData, sourceName); } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[CraneAttribute] removeSource 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CraneAttribute] removeSource 失败: " + e.getMessage());
         }
     }
 
@@ -115,7 +115,7 @@ public final class DefaultCraneAttributeBridge implements CraneAttributeBridge {
     public void updateAttribute(Player player) {
         if (!available || player == null) return;
         try { updateAttributeMethod.invoke(null, player); } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[CraneAttribute] updateAttribute 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CraneAttribute] updateAttribute 失败: " + e.getMessage());
         }
     }
 

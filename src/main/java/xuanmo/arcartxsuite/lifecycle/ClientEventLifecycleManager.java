@@ -56,7 +56,7 @@ public final class ClientEventLifecycleManager {
         try {
             Class<?> rawEventClass = reflectionCache.forName("priv.seventeen.artist.arcartx.event.client.ClientCustomPacketEvent");
             if (!Event.class.isAssignableFrom(rawEventClass)) {
-                plugin.getLogger().warning("ArcartX ClientCustomPacketEvent 不是 Bukkit Event，已跳过监听。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX ClientCustomPacketEvent 不是 Bukkit Event，已跳过监听。");
                 return;
             }
             Class<? extends Event> eventClass = (Class<? extends Event>) rawEventClass;
@@ -74,7 +74,7 @@ public final class ClientEventLifecycleManager {
                 true
             );
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("注册 ArcartX 客户端自定义包监听失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("注册 ArcartX 客户端自定义包监听失败: " + exception.getMessage());
         }
     }
 
@@ -130,7 +130,7 @@ public final class ClientEventLifecycleManager {
         try {
             Class<?> rawEventClass = reflectionCache.forName("priv.seventeen.artist.arcartx.event.client.ClientInitializedEvent$End");
             if (!Event.class.isAssignableFrom(rawEventClass)) {
-                plugin.getLogger().warning("ArcartX ClientInitializedEvent$End 不是 Bukkit Event，已跳过监听。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX ClientInitializedEvent$End 不是 Bukkit Event，已跳过监听。");
                 return;
             }
             Class<? extends Event> eventClass = (Class<? extends Event>) rawEventClass;
@@ -146,7 +146,7 @@ public final class ClientEventLifecycleManager {
                 true
             );
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("注册 ArcartX 客户端初始化监听失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("注册 ArcartX 客户端初始化监听失败: " + exception.getMessage());
         }
     }
 

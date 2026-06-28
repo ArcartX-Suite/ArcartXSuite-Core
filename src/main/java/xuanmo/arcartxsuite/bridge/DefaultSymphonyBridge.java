@@ -56,9 +56,9 @@ public final class DefaultSymphonyBridge implements SymphonyBridge {
             recalculateMethod = symphonyApiInstance.getClass().getMethod("recalculate", livingEntityClass);
 
             available = true;
-            plugin.getLogger().fine("[Symphony] 桥接初始化成功");
+            xuanmo.arcartxsuite.module.AxsLog.logger().fine("[Symphony] 桥接初始化成功");
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[Symphony] 桥接初始化失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Symphony] 桥接初始化失败: " + exception.getMessage());
             reset();
         }
     }
@@ -72,7 +72,7 @@ public final class DefaultSymphonyBridge implements SymphonyBridge {
             Object operation = percent ? percentOperation : flatOperation;
             setAttributeMethod.invoke(symphonyApiInstance, player, attributeId, operation, value, sourceKey);
         } catch (ReflectiveOperationException e) {
-            plugin.getLogger().warning("[Symphony] setAttribute 失败: " + e.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[Symphony] setAttribute 失败: " + e.getMessage());
         }
     }
 

@@ -75,7 +75,7 @@ public class ArcartXClientBridge implements ClientBridgeAPI {
             available = true;
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            plugin.getLogger().warning("初始化 ArcartX 客户端桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 ArcartX 客户端桥接失败: " + exception.getMessage());
             return false;
         }
     }
@@ -102,7 +102,7 @@ public class ArcartXClientBridge implements ClientBridgeAPI {
             sendDamageDisplayMethod.invoke(resolveNetworkSender(), player, configId, amount, target);
             return true;
         } catch (ReflectiveOperationException | IllegalArgumentException exception) {
-            plugin.getLogger().warning("ArcartX 伤害数字发送失败: " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX 伤害数字发送失败: " + describeException(exception));
             return false;
         }
     }
@@ -114,7 +114,7 @@ public class ArcartXClientBridge implements ClientBridgeAPI {
 
         Method method = findBestServerVariableMethod(value);
         if (method == null) {
-            plugin.getLogger().warning(
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(
                 "ArcartX 未找到兼容的 sendServerVariable 签名，变量="
                     + variableName
                     + "，类型="
@@ -127,7 +127,7 @@ public class ArcartXClientBridge implements ClientBridgeAPI {
             method.invoke(resolveNetworkSender(), player, variableName, value);
             return true;
         } catch (ReflectiveOperationException | IllegalArgumentException exception) {
-            plugin.getLogger().warning("ArcartX 服务器变量发送失败: " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX 服务器变量发送失败: " + describeException(exception));
             return false;
         }
     }
@@ -167,7 +167,7 @@ public class ArcartXClientBridge implements ClientBridgeAPI {
             doWithSeenByMethod.invoke(null, entity, callback);
             return true;
         } catch (ReflectiveOperationException | IllegalArgumentException exception) {
-            plugin.getLogger().warning("ArcartX 可视玩家遍历失败: " + describeException(exception));
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX 可视玩家遍历失败: " + describeException(exception));
             return false;
         }
     }

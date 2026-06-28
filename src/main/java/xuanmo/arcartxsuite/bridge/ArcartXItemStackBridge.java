@@ -56,7 +56,7 @@ public final class ArcartXItemStackBridge implements ItemBridgeAPI {
             available = true;
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("初始化 ArcartX ItemStack 桥接失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("初始化 ArcartX ItemStack 桥接失败: " + exception.getMessage());
             return false;
         }
     }
@@ -91,7 +91,7 @@ public final class ArcartXItemStackBridge implements ItemBridgeAPI {
                 Throwable cause = exception instanceof InvocationTargetException invocationTargetException
                     ? invocationTargetException.getCause()
                     : exception;
-                plugin.getLogger().warning(
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning(
                     "ArcartX ItemStack item2json 调用失败，将回退为纯文本拾取提示: "
                         + (cause == null ? exception.getClass().getSimpleName() : cause.getMessage())
                 );

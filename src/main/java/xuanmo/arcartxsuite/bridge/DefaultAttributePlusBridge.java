@@ -45,7 +45,7 @@ public final class DefaultAttributePlusBridge implements AttributePlusBridge {
             Class<?> apiClass = Class.forName(API_CLASS_NAME, true, attributePlus.getClass().getClassLoader());
             getAttrDataMethod = findMethod(apiClass, "getAttrData", 1, cls -> Player.class.isAssignableFrom(cls[0]));
             if (getAttrDataMethod == null) {
-                plugin.getLogger().fine("[AttributePlus] 未找到 getAttrData 方法");
+                xuanmo.arcartxsuite.module.AxsLog.logger().fine("[AttributePlus] 未找到 getAttrData 方法");
                 reset();
                 return;
             }
@@ -61,10 +61,10 @@ public final class DefaultAttributePlusBridge implements AttributePlusBridge {
             boolean hasLinesApi = (addSourceLines4Method != null || addStaticSource3Method != null) && takeSourceAttributeMethod != null;
             available = hasBasicApi || hasLinesApi;
             if (available) {
-                plugin.getLogger().fine("[AttributePlus] 桥接初始化成功");
+                xuanmo.arcartxsuite.module.AxsLog.logger().fine("[AttributePlus] 桥接初始化成功");
             }
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[AttributePlus] 桥接初始化失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributePlus] 桥接初始化失败: " + exception.getMessage());
             reset();
         }
     }
@@ -106,7 +106,7 @@ public final class DefaultAttributePlusBridge implements AttributePlusBridge {
         try {
             addSourceAttributeMethod.invoke(null, attrData, sourceId, attributeSource);
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[AttributePlus] addSource 失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributePlus] addSource 失败: " + exception.getMessage());
         }
     }
 
@@ -123,7 +123,7 @@ public final class DefaultAttributePlusBridge implements AttributePlusBridge {
                 addStaticSource3Method.invoke(null, attrData, sourceName, copy);
             }
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[AttributePlus] addSourceLines 失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributePlus] addSourceLines 失败: " + exception.getMessage());
         }
     }
 
@@ -135,7 +135,7 @@ public final class DefaultAttributePlusBridge implements AttributePlusBridge {
         try {
             takeSourceAttributeMethod.invoke(null, attrData, sourceId);
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[AttributePlus] removeSource 失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributePlus] removeSource 失败: " + exception.getMessage());
         }
     }
 
@@ -150,7 +150,7 @@ public final class DefaultAttributePlusBridge implements AttributePlusBridge {
                 updateAttributeMethod.invoke(null, args);
             }
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("[AttributePlus] updateAttribute 失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[AttributePlus] updateAttribute 失败: " + exception.getMessage());
         }
     }
 

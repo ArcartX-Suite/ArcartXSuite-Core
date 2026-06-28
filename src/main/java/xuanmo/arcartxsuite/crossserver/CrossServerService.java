@@ -52,7 +52,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
         configuration = CrossServerGlobalConfiguration.from(plugin.getConfig());
         dedupe = new CrossServerDedupe(configuration.dedupeTtlMs());
         if (configuration.shouldSign() && configuration.signatureSecret().isBlank()) {
-            plugin.getLogger().warning("[CrossServer] signature.enabled=true 但 secret 为空，签名与验签已禁用。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] signature.enabled=true 但 secret 为空，签名与验签已禁用。");
         }
         if (configuration.redisEnabled()) {
             startRedis();
@@ -61,7 +61,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
             startProxy();
         }
         if (configuration.redisEnabled() || configuration.proxyEnabled()) {
-            plugin.getLogger().info(
+            xuanmo.arcartxsuite.module.AxsLog.logger().info(
                 "[CrossServer] 已启动 | node=" + configuration.nodeId()
                     + " | redis=" + configuration.redisEnabled()
                     + " | proxy=" + configuration.proxyEnabled()
@@ -134,7 +134,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
             });
             redisSubscriberExecutor.execute(this::redisSubscribeLoop);
         } catch (Exception exception) {
-            plugin.getLogger().warning("[CrossServer] Redis 初始化失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] Redis 初始化失败: " + exception.getMessage());
             shutdownRedis();
         }
     }
@@ -146,7 +146,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
                 return;
             } catch (Exception exception) {
                 if (redisSubscriberActive) {
-                    plugin.getLogger().warning("[CrossServer] Redis 订阅中断，3 秒后重试: " + exception.getMessage());
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] Redis 订阅中断，3 秒后重试: " + exception.getMessage());
                     try {
                         Thread.sleep(3000L);
                     } catch (InterruptedException interruptedException) {
@@ -226,7 +226,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
             input.readFully(payload);
             handleWireMessage(new String(payload, StandardCharsets.UTF_8), "proxy");
         } catch (Exception exception) {
-            plugin.getLogger().warning("[CrossServer] Proxy 消息解析失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] Proxy 消息解析失败: " + exception.getMessage());
         }
     }
 
@@ -235,13 +235,13 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
             return;
         }
         if (wire.length() > configuration.maxPayloadChars()) {
-            plugin.getLogger().warning("[CrossServer] 丢弃超大 payload (" + source + "): " + wire.length());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] 丢弃超大 payload (" + source + "): " + wire.length());
             return;
         }
         try {
             CrossServerEnvelope envelope = CrossServerEnvelopeCodec.decode(wire);
             if (envelope.protocol() != CrossServerEnvelope.PROTOCOL_VERSION) {
-                plugin.getLogger().warning("[CrossServer] 不支持的 protocol=" + envelope.protocol());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] 不支持的 protocol=" + envelope.protocol());
                 return;
             }
             if (configuration.nodeId().equalsIgnoreCase(envelope.nodeId())) {
@@ -249,11 +249,11 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
             }
             if (configuration.shouldVerify()) {
                 if (envelope.signature() == null || envelope.signature().isBlank()) {
-                    plugin.getLogger().warning("[CrossServer] 丢弃无签名消息 module=" + envelope.module());
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] 丢弃无签名消息 module=" + envelope.module());
                     return;
                 }
                 if (!CrossServerSigner.verify(envelope, envelope.signature(), secretBytes())) {
-                    plugin.getLogger().warning("[CrossServer] 签名无效 module=" + envelope.module());
+                    xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] 签名无效 module=" + envelope.module());
                     return;
                 }
             }
@@ -276,14 +276,14 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
                 }
             });
         } catch (Exception exception) {
-            plugin.getLogger().warning("[CrossServer] 入站消息失败 (" + source + "): " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] 入站消息失败 (" + source + "): " + exception.getMessage());
         }
     }
 
     private void publishEnvelope(CrossServerEnvelope unsignedEnvelope, ModuleRegistration registration) {
         if (unsignedEnvelope.payload() != null
             && unsignedEnvelope.payload().length() > configuration.maxPayloadChars()) {
-            plugin.getLogger().warning(
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(
                 "[CrossServer] 模块 " + unsignedEnvelope.module() + " payload 超过上限，已跳过发送"
             );
             return;
@@ -301,7 +301,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
             try (Jedis jedis = jedisPool.getResource()) {
                 jedis.publish(configuration.redisChannel(), wire);
             } catch (Exception exception) {
-                plugin.getLogger().warning("[CrossServer] Redis 发布失败: " + exception.getMessage());
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] Redis 发布失败: " + exception.getMessage());
             }
         }
         if (sendProxy) {
@@ -312,7 +312,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
     private void publishProxy(String wire, String moduleId) {
         byte[] payloadBytes = wire.getBytes(StandardCharsets.UTF_8);
         if (payloadBytes.length > PROXY_MAX_BYTES) {
-            plugin.getLogger().warning(
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(
                 "[CrossServer] 模块 " + moduleId + " Proxy 负载 " + payloadBytes.length
                     + " 字节超过 " + PROXY_MAX_BYTES + "，已跳过 Proxy 仅走 Redis"
             );
@@ -333,7 +333,7 @@ public final class CrossServerService implements CrossServerAPI, PluginMessageLi
             }
             carrier.sendPluginMessage(plugin, BUNGEE_CHANNEL, buffer.toByteArray());
         } catch (Exception exception) {
-            plugin.getLogger().warning("[CrossServer] Proxy 发布失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("[CrossServer] Proxy 发布失败: " + exception.getMessage());
         }
     }
 

@@ -33,7 +33,7 @@ public final class ArcartXWaypointBridge implements xuanmo.arcartxsuite.api.brid
 
         Plugin arcartX = Bukkit.getPluginManager().getPlugin("ArcartX");
         if (arcartX == null) {
-            plugin.getLogger().warning(ownerLabel + " 初始化失败: 未找到 ArcartX。");
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(ownerLabel + " 初始化失败: 未找到 ArcartX。");
             return false;
         }
 
@@ -44,11 +44,11 @@ public final class ArcartXWaypointBridge implements xuanmo.arcartxsuite.api.brid
             loadAvailableStyleIds(arcartX.getDataFolder());
             available = hasHandlerBridge();
             if (!available) {
-                plugin.getLogger().warning(ownerLabel + " 初始化失败: 未找到兼容的 waypoint API。");
+                xuanmo.arcartxsuite.module.AxsLog.logger().warning(ownerLabel + " 初始化失败: 未找到兼容的 waypoint API。");
             }
             return available;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning(ownerLabel + " 初始化失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(ownerLabel + " 初始化失败: " + exception.getMessage());
             return false;
         }
     }
@@ -75,7 +75,7 @@ public final class ArcartXWaypointBridge implements xuanmo.arcartxsuite.api.brid
             return preferred;
         }
         if (!"default".equalsIgnoreCase(preferred) && availableStyleIds.contains("default")) {
-            plugin.getLogger().warning(ownerLabel + " 路标样式不存在，已回退 default: " + preferred);
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning(ownerLabel + " 路标样式不存在，已回退 default: " + preferred);
             return "default";
         }
         return preferred;
@@ -102,7 +102,7 @@ public final class ArcartXWaypointBridge implements xuanmo.arcartxsuite.api.brid
             addWaypointByHandlerMethod.invoke(handler, waypointId, title, styleId, x, y, z);
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("ArcartX waypoint 创建失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX waypoint 创建失败: " + exception.getMessage());
             return false;
         }
     }
@@ -120,7 +120,7 @@ public final class ArcartXWaypointBridge implements xuanmo.arcartxsuite.api.brid
             deleteWaypointByHandlerMethod.invoke(handler, waypointId, animated);
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("ArcartX waypoint 删除失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX waypoint 删除失败: " + exception.getMessage());
             return false;
         }
     }
@@ -138,7 +138,7 @@ public final class ArcartXWaypointBridge implements xuanmo.arcartxsuite.api.brid
             clearWaypointByHandlerMethod.invoke(handler);
             return true;
         } catch (ReflectiveOperationException exception) {
-            plugin.getLogger().warning("ArcartX waypoint 清理失败: " + exception.getMessage());
+            xuanmo.arcartxsuite.module.AxsLog.logger().warning("ArcartX waypoint 清理失败: " + exception.getMessage());
             return false;
         }
     }
