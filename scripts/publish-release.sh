@@ -31,4 +31,4 @@ git tag -a "$TAG" -m "axs-api ${VERSION}" 2>/dev/null || git tag -f "$TAG" -m "a
 git push origin main
 git push origin "$TAG"
 
-echo "Done. Watch: https://github.com/xuanmomo233/ArcartXSuite-Core/actions"
+echo "Done. Watch: https://github.com/ArcartX-Suite/ArcartXSuite-Core/actions"

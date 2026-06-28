@@ -17,7 +17,7 @@
 
 ### 获取 `axs-api` JAR
 
-**方式一（推荐）：** 从 [GitHub Releases](https://github.com/xuanmomo233/ArcartXSuite-Core/releases) 下载 `axs-api-<version>.jar`。
+**方式一（推荐）：** 从 [GitHub Releases](https://github.com/ArcartX-Suite/ArcartXSuite-Core/releases) 下载 `axs-api-<version>.jar`。
 
 **方式二：** 克隆本仓库后本地构建：
 
@@ -55,7 +55,7 @@ python scripts/sign-module.py sign --module-yml src/main/resources/module.yml --
 python scripts/sign-module.py pubkey --public-key module-signing-keys/ed25519-public.pem
 ```
 
-Wiki 完整说明：[模块 Ed25519 签名](https://github.com/xuanmomo233/ArcartXSuite-Wiki/blob/main/docs/guide/developer/module-signature.md)
+Wiki 完整说明：[模块 Ed25519 签名](https://github.com/ArcartX-Suite/ArcartXSuite-Wiki/blob/main/docs/guide/developer/module-signature.md)
 
 ## 发布 `axs-api`（维护者）
 
@@ -71,7 +71,7 @@ Wiki 完整说明：[模块 Ed25519 签名](https://github.com/xuanmomo233/Arcar
 .\scripts\publish-release.ps1 -Version 1.2.0-beta
 ```
 
-推送 `v<version>` 标签后，CI 会构建 `axs-api-<version>.jar` 并创建 [GitHub Release](https://github.com/xuanmomo233/ArcartXSuite-Core/releases)。
+推送 `v<version>` 标签后，CI 会构建 `axs-api-<version>.jar` 并创建 [GitHub Release](https://github.com/ArcartX-Suite/ArcartXSuite-Core/releases)。
 
 ### 方式二：GitHub 网页
 

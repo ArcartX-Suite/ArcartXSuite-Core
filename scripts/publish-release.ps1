@@ -32,4 +32,4 @@ if ($LASTEXITCODE -ne 0) { git tag -f $Tag -m "axs-api $Version" }
 git push origin main
 git push origin $Tag
 
-Write-Host "Done. Watch: https://github.com/xuanmomo233/ArcartXSuite-Core/actions"
+Write-Host "Done. Watch: https://github.com/ArcartX-Suite/ArcartXSuite-Core/actions"
