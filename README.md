@@ -15,7 +15,22 @@
 
 ## 快速开始
 
-1. 获取 `axs-api` JAR
+### 获取 `axs-api` JAR
+
+**方式一（推荐）：** 从 [GitHub Releases](https://github.com/xuanmomo233/ArcartXSuite-Core/releases) 下载 `axs-api-<version>.jar`。
+
+**方式二：** 克隆本仓库后本地构建：
+
+```bash
+./gradlew :axs-api:jar
+# Windows: gradlew.bat :axs-api:jar
+```
+
+产物位于 `axs-api/build/libs/axs-api-<version>.jar`。
+
+### 编写模块
+
+1. 将 `axs-api` JAR 放入模块项目的 `libs/`
 2. 在模块项目的 `build.gradle.kts` 中添加依赖：
 
 ```kotlin
@@ -28,6 +43,12 @@ dependencies {
 3. 实现 `AbstractAXSModule` 并打包为 `.jar`
 4. 将模块 JAR 放入服务器的 `plugins/ArcartXSuite/modules/`
 5. 在 `plugins/ArcartXSuite/config.yml` 中启用模块
+
+## 发布 `axs-api`（维护者）
+
+1. 在 `gradle.properties` 中更新 `version`（或与 Release 标签 `v<version>` 保持一致）。
+2. 在 GitHub 创建 Release 并发布；CI 会自动构建并上传 `axs-api-<version>.jar`。
+3. 也可在 Actions 中手动运行 **Release axs-api** 工作流，从 Artifacts 下载 JAR。
 
 ## 项目结构
 
