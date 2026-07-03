@@ -13,12 +13,14 @@ import java.util.logging.Logger;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.Listener;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import xuanmo.arcartxsuite.api.config.ConfigSyncSpec;
 import xuanmo.arcartxsuite.api.config.ModuleConfigSpec;
 import xuanmo.arcartxsuite.api.config.SyncPolicy;
 import xuanmo.arcartxsuite.api.config.ValidationRule;
+import xuanmo.arcartxsuite.api.bridge.PacketBridgeAPI;
 import xuanmo.arcartxsuite.api.message.MessageProvider;
 
 /**
@@ -45,12 +47,34 @@ import xuanmo.arcartxsuite.api.message.MessageProvider;
  */
 public abstract class AbstractAXSModule implements AXSModule {
 
-    /** 模块上下文，在 {@link #onEnable} 时注入 */
-    protected ModuleContext context;
+    /** 模块上下文，在 {@link #onEnable} 时注入（私有，子类通过 protected 字段访问具体 API） */
+    private ModuleContext context;
+
+    // ── 注入的 API 字段（子类直接使用，无需通过 context 获取） ──────
+    protected JavaPlugin plugin;
+    protected Logger logger;
+    protected File dataFolder;
+    protected @Nullable xuanmo.arcartxsuite.api.bridge.PacketBridgeAPI packetBridge;
+    protected @Nullable xuanmo.arcartxsuite.api.bridge.ClientBridgeAPI clientBridge;
+    protected @Nullable xuanmo.arcartxsuite.api.bridge.ItemBridgeAPI itemStackBridge;
+    protected xuanmo.arcartxsuite.api.item.ItemSourceRegistry itemSourceRegistry;
+    protected xuanmo.arcartxsuite.api.item.ItemMatcherAPI itemMatcher;
+    protected xuanmo.arcartxsuite.api.currency.CurrencyBridgeAPI currencyManager;
+    protected xuanmo.arcartxsuite.api.attribute.AttributeBridgeRegistry attributeBridge;
+    protected @NotNull xuanmo.arcartxsuite.api.script.AriaBridge ariaBridge;
+    protected @NotNull xuanmo.arcartxsuite.api.condition.ScriptConditionEvaluator scriptConditionEvaluator;
+    protected @Nullable xuanmo.arcartxsuite.api.security.PacketGuardAPI packetGuard;
+    protected @NotNull xuanmo.arcartxsuite.api.account.AccountTypeService accountTypeService;
+    protected @NotNull xuanmo.arcartxsuite.api.crossserver.CrossServerAPI crossServer;
+    protected @Nullable xuanmo.arcartxsuite.api.bridge.WorldTextureBridgeAPI worldTextureBridge;
+    protected @NotNull xuanmo.arcartxsuite.api.placeholder.PlaceholderResolverAPI placeholderResolver;
+    protected @NotNull xuanmo.arcartxsuite.api.placeholder.PlaceholderExpansionRegistry expansionRegistry;
+    protected @Nullable xuanmo.arcartxsuite.api.bridge.PropBridgeAPI propBridge;
+    protected File pluginDataFolder;
+
 
     private boolean ready;
     private boolean reloading; // reload 期间跳过 UI 注销，避免客户端丢失 HUD
-    private boolean configFileJustMigrated; // 标记配置文件是否刚从旧位置迁移
     private final Map<String, UiBinding> uiBindings = new LinkedHashMap<>();
     private MessageProvider messages; // 模块消息提供者，由 messagesFileName() 声明后自动加载
 
@@ -263,6 +287,29 @@ public abstract class AbstractAXSModule implements AXSModule {
     @Override
     public final boolean onEnable(ModuleContext context) throws Exception {
         this.context = context;
+
+        // 注入 API 字段（子类通过 protected 字段直接访问，无需 context）
+        this.plugin = context.plugin();
+        this.logger = context.logger();
+        this.dataFolder = context.dataFolder();
+        this.pluginDataFolder = context.pluginDataFolder();
+        this.packetBridge = context.packetBridge();
+        this.clientBridge = context.clientBridge();
+        this.itemStackBridge = context.itemStackBridge();
+        this.itemSourceRegistry = context.itemSourceRegistry();
+        this.itemMatcher = context.itemMatcher();
+        this.currencyManager = context.currencyManager();
+        this.attributeBridge = context.attributeBridge();
+        this.ariaBridge = context.ariaBridge();
+        this.scriptConditionEvaluator = context.scriptConditionEvaluator();
+        this.packetGuard = context.packetGuard();
+        this.accountTypeService = context.accountTypeService();
+        this.crossServer = context.crossServer();
+        this.worldTextureBridge = context.worldTextureBridge();
+        this.placeholderResolver = context.placeholderResolver();
+        this.expansionRegistry = context.expansionRegistry();
+        this.propBridge = context.propBridge();
+
         Logger logger = context.logger();
 
         try {
@@ -272,11 +319,6 @@ public abstract class AbstractAXSModule implements AXSModule {
 
             // 1b. 导出并加载外部化消息（若声明）
             initMessages();
-
-            // 若配置文件刚从旧位置迁移，提示使用智能配置体检
-            if (configFileJustMigrated) {
-                logger.info("配置文件已迁移至新位置，建议运行 '/arcartxsuite config preview " + descriptor().id() + "' 检查配置兼容性");
-            }
 
             // 2. 导出 UI 资源并绑定
             exportAndBindUi();
@@ -344,12 +386,10 @@ public abstract class AbstractAXSModule implements AXSModule {
                 context.logger().warning(descriptor().name() + " 模块关闭异常: " + exception.getMessage());
             }
         }
-        // 注销 UI（reload 期间跳过 unregisterUi，避免客户端丢失已打开的 HUD）
-        if (!reloading) {
-            for (UiBinding binding : uiBindings.values()) {
-                if (binding.registeredUiId() != null && context != null) {
-                    context.unregisterUi(binding.registeredUiId());
-                }
+        // 注销 UI（registerOrReloadUi 在 re-enable 时会自动重新注册）
+        for (UiBinding binding : uiBindings.values()) {
+            if (binding.registeredUiId() != null && context != null) {
+                context.unregisterUi(binding.registeredUiId());
             }
         }
         uiBindings.clear();
@@ -408,18 +448,108 @@ public abstract class AbstractAXSModule implements AXSModule {
         return messages;
     }
 
+
+    // ── 注入的 API 委托方法（子类直接调用，无需通过 context） ──────
+
+    /** 按类型查找已加载的模块实例 */
+    protected <T extends AXSModule> java.util.Optional<T> getModule(Class<T> moduleClass) {
+        return context.getModule(moduleClass);
+    }
+
+    /** 按 id 查找已加载的模块实例 */
+    protected java.util.Optional<AXSModule> getModule(String moduleId) {
+        return context.getModule(moduleId);
+    }
+
+    /** 注册当前模块提供的能力接口 */
+    protected <T> void registerCapability(Class<T> capabilityType, T implementation) {
+        context.registerCapability(capabilityType, implementation);
+    }
+
+    /** 按类型查找其他模块注册的能力接口 */
+    @Nullable
+    protected <T> T getCapability(Class<T> capabilityType) {
+        return context.getCapability(capabilityType);
+    }
+
+    /** 创建新的路标桥接实例 */
+    @NotNull
+    protected xuanmo.arcartxsuite.api.bridge.WaypointBridgeAPI createWaypointBridge() {
+        return context.createWaypointBridge();
+    }
+
+    /** 创建新的 Adyeshach NPC 桥接实例 */
+    @NotNull
+    protected xuanmo.arcartxsuite.api.bridge.AdyeshachNpcBridgeAPI createAdyeshachNpcBridge() {
+        return context.createAdyeshachNpcBridge();
+    }
+
+    /** 导出模块内置资源到目标文件 */
+    protected void exportResource(String resourcePath, File target, boolean overwrite) {
+        context.exportResource(resourcePath, target, overwrite);
+    }
+
+    /** 从模块 Jar 中读取受保护的资源 */
+    protected InputStream openProtectedResource(String resourcePath, ClassLoader loader) {
+        return context.openProtectedResource(resourcePath, loader);
+    }
+
+    /** 从模块 Jar 导出配置文件到宿主数据目录 */
+    protected File exportConfigResource(String resourcePath, String targetRelativePath, boolean overwrite, ClassLoader loader) {
+        return context.exportConfigResource(resourcePath, targetRelativePath, overwrite, loader);
+    }
+
+    /** 从模块 Jar 导出 UI 资源到宿主 ui/ 目录 */
+    protected File exportUiResource(String resourcePath, String relativeUiPath, boolean overwrite, ClassLoader loader) throws IOException {
+        return context.exportUiResource(resourcePath, relativeUiPath, overwrite, loader);
+    }
+
+    /** 检查指定的外部 Bukkit 插件是否已安装 */
+    protected boolean hasPlugin(String pluginName) {
+        return context.hasPlugin(pluginName);
+    }
+
+    /** 注册 Bukkit 事件监听器 */
+    protected void registerListener(Listener listener) {
+        context.registerListener(listener);
+    }
+
+    /** 延迟绑定玩家命令 */
+    protected void registerCommand(String commandName, TabExecutor executor) {
+        context.registerCommand(commandName, executor);
+    }
+
+    /** 注册按键事件处理器 */
+    protected void registerKeybindHandler(String keyName, int priority, KeybindHandler handler) {
+        context.registerKeybindHandler(keyName, priority, handler);
+    }
+
+    /** 准备 ArcartX UI 绑定 */
+    @Nullable
+    protected UiBinding prepareUiBinding(String moduleName, String configuredUiId, boolean registerOnEnable, File uiFile) {
+        return context.prepareUiBinding(moduleName, configuredUiId, registerOnEnable, uiFile);
+    }
+
+    /** 注销指定的 ArcartX UI */
+    protected void unregisterUi(@Nullable String registeredUiId) {
+        context.unregisterUi(registeredUiId);
+    }
+
+    /** TACZ 兼容桥接是否已激活 */
+    protected boolean taczActive() {
+        return context.taczActive();
+    }
+
     // ── 内部方法 ──────────────────────────────────────────────
 
     /**
      * 确保配置文件存在。
      * <p>
      * 新版本中模块配置统一落到 {@code plugins/ArcartXSuite/data/<moduleId>/config.yml}，
-     * 不再散落在宿主根目录。若检测到根目录存在旧版 yml（如 {@code ArcartXChat.yml}），
-     * 会一次性迁移到新位置；新装服务器则直接从模块 Jar 导出默认配置。
+     * 新装服务器则直接从模块 Jar 导出默认配置。
      */
     @Nullable
     private File ensureConfigExists() {
-        configFileJustMigrated = false;
         String fileName = configFileName();
         if (fileName == null || fileName.isBlank()) {
             return null;
@@ -427,27 +557,6 @@ public abstract class AbstractAXSModule implements AXSModule {
 
         File moduleDataFolder = context.dataFolder();
         File newConfigFile = new File(moduleDataFolder, "config.yml");
-
-        // 一次性迁移：plugins/ArcartXSuite/<fileName> -> data/<moduleId>/config.yml
-        File legacyFile = new File(context.pluginDataFolder(), fileName);
-        if (legacyFile.isFile() && !newConfigFile.exists()) {
-            try {
-                java.nio.file.Files.createDirectories(moduleDataFolder.toPath());
-                java.nio.file.Files.move(
-                    legacyFile.toPath(),
-                    newConfigFile.toPath(),
-                    java.nio.file.StandardCopyOption.ATOMIC_MOVE
-                );
-                configFileJustMigrated = true;
-                context.logger().info(org.bukkit.ChatColor.GOLD + "→ 已归位配置文件: "
-                    + org.bukkit.ChatColor.YELLOW + fileName
-                    + org.bukkit.ChatColor.GRAY + "  ➜  "
-                    + org.bukkit.ChatColor.AQUA + "data/" + moduleDataFolder.getName() + "/config.yml");
-            } catch (IOException exception) {
-                context.logger().warning("迁移配置文件失败: " + fileName
-                    + " | " + exception.getMessage());
-            }
-        }
 
         // 首次启动或仍缺失：从模块 Jar 导出默认配置到 data/<moduleId>/config.yml
         if (!newConfigFile.exists()) {
@@ -536,4 +645,102 @@ public abstract class AbstractAXSModule implements AXSModule {
     protected void recordUiBinding(String relativeUiPath, UiBinding binding) {
         uiBindings.put(relativeUiPath, binding);
     }
+
+    // ── 统一 UI 注册 API（供子类与第三方模块使用）────────────────────
+
+    /**
+     * 注册模块 UI（基于 {@link #uiResourceMappings()} 中的映射）。
+     * <p>
+     * 自动导出资源文件并使用 {@link PacketBridgeAPI#registerOrReloadUi} 注册/热重载，
+     * 解决 reload 时手动修改的 UI 文件不生效的问题。
+     *
+     * @param relativeUiPath   UI 文件相对路径（如 {@code "ui/menu_panel.yml"}）
+     * @param configuredUiId   配置中的 UI ID（可为 null，自动从文件名推导）
+     * @param registerOnEnable 是否注册到 ArcartX 引擎
+     * @return UI 绑定结果
+     * @throws IllegalStateException 若 relativeUiPath 未在 uiResourceMappings() 中声明
+     */
+    @NotNull
+    protected final UiBinding registerModuleUi(@NotNull String relativeUiPath,
+                                                @Nullable String configuredUiId,
+                                                boolean registerOnEnable) {
+        String resourcePath = resolveUiResourcePath(relativeUiPath);
+        if (resourcePath == null) {
+            throw new IllegalStateException(
+                "relativeUiPath '" + relativeUiPath + "' 未在 uiResourceMappings() 中声明"
+            );
+        }
+        return doRegisterModuleUi(resourcePath, relativeUiPath, configuredUiId, registerOnEnable);
+    }
+
+    /**
+     * 注册模块 UI（显式指定 jar 内资源路径）。
+     * <p>
+     * 适用于动态生成的 UI 文件（如运行时通过模板写入的文件），
+     * 这些文件不需要在 {@link #uiResourceMappings()} 中声明。
+     *
+     * @param resourcePath     jar 内资源路径（如 {@code "arcartx/ui/custom.yml"}）
+     * @param relativeUiPath   导出到数据目录的相对路径
+     * @param configuredUiId   配置中的 UI ID
+     * @param registerOnEnable 是否注册
+     * @return UI 绑定结果
+     */
+    @NotNull
+    protected final UiBinding registerModuleUi(@NotNull String resourcePath,
+                                                @NotNull String relativeUiPath,
+                                                @Nullable String configuredUiId,
+                                                boolean registerOnEnable) {
+        return doRegisterModuleUi(resourcePath, relativeUiPath, configuredUiId, registerOnEnable);
+    }
+
+    /**
+     * 获取已注册 UI 的 runtime ID。
+     *
+     * @param relativeUiPath {@link #uiResourceMappings()} 中声明的相对路径
+     * @return runtime UI ID，未注册时返回 null
+     */
+    @Nullable
+    protected final String getModuleUiId(@NotNull String relativeUiPath) {
+        UiBinding binding = uiBindings.get(relativeUiPath);
+        return binding != null ? binding.runtimeUiId() : null;
+    }
+
+    private UiBinding doRegisterModuleUi(String resourcePath, String relativeUiPath,
+                                          String configuredUiId, boolean registerOnEnable) {
+        boolean overwrite = overwriteUiFiles();
+        File uiFile;
+        try {
+            uiFile = context.exportUiResource(resourcePath, relativeUiPath, overwrite, moduleClassLoader());
+        } catch (IOException e) {
+            throw new RuntimeException("导出 UI 资源失败: " + resourcePath, e);
+        }
+        if (!registerOnEnable) {
+            String runtime = PacketBridgeAPI.normalizeUiId(configuredUiId, uiFile);
+            UiBinding binding = new UiBinding(runtime, null);
+            recordUiBinding(relativeUiPath, binding);
+            return binding;
+        }
+        PacketBridgeAPI bridge = context.packetBridge();
+        if (bridge == null || !bridge.isAvailable()) {
+            String runtime = PacketBridgeAPI.normalizeUiId(configuredUiId, uiFile);
+            return new UiBinding(runtime, null);
+        }
+        PacketBridgeAPI.UiRegistrationResult reg =
+            bridge.registerOrReloadUi(configuredUiId, uiFile);
+        UiBinding binding = new UiBinding(reg.runtimeUiId(), reg.registeredUiId());
+        recordUiBinding(relativeUiPath, binding);
+        return binding;
+    }
+
+    @Nullable
+    private String resolveUiResourcePath(String relativeUiPath) {
+        for (Map.Entry<String, String> entry : uiResourceMappings().entrySet()) {
+            if (entry.getValue().equals(relativeUiPath)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
 }
+
+

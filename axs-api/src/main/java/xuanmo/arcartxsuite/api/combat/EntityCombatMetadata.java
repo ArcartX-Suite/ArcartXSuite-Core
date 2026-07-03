@@ -96,13 +96,7 @@ public final class EntityCombatMetadata {
                 if (internalName instanceof String s && !s.isBlank()) return s;
             }
         } catch (Exception ignored) {}
-        try {
-            // 退化：getMobType() 直接返回 String 形式的 ID
-            Object fallback = activeMob.getClass().getMethod("getMobType").invoke(activeMob);
-            return fallback instanceof String s ? s : "";
-        } catch (Exception ignored) {
-            return "";
-        }
+        return "";
     }
 
     // ─── Health resolution ───────────────────────────────────

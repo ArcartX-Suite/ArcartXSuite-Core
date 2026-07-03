@@ -65,10 +65,10 @@ Wiki 完整说明：[模块 Ed25519 签名](https://github.com/ArcartX-Suite/Arc
 
 ```bash
 # Linux / macOS
-./scripts/publish-release.sh 1.2.0-beta
+./scripts/publish-release.sh 1.3.2
 
 # Windows PowerShell
-.\scripts\publish-release.ps1 -Version 1.2.0-beta
+.\scripts\publish-release.ps1 -Version 1.3.2
 ```
 
 推送 `v<version>` 标签后，CI 会构建 `axs-api-<version>.jar` 并创建 [GitHub Release](https://github.com/ArcartX-Suite/ArcartXSuite-Core/releases)。
