@@ -951,7 +951,7 @@ public final class ModuleRegistry {
         return config.getBoolean("modules." + moduleId + ".enabled", false);
     }
 
-    public InputStream openProtectedResource(String moduleId, String resourcePath, ClassLoader loader) throws IOException {
+    public InputStream openResource(String moduleId, String resourcePath, ClassLoader loader) throws IOException {
         ClassLoader effective = loader != null ? loader : getClass().getClassLoader();
         InputStream input = effective.getResourceAsStream(resourcePath);
         if (input != null) {

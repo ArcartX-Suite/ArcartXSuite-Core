@@ -489,9 +489,9 @@ public abstract class AbstractAXSModule implements AXSModule {
         context.exportResource(resourcePath, target, overwrite);
     }
 
-    /** 从模块 Jar 中读取受保护的资源 */
-    protected InputStream openProtectedResource(String resourcePath, ClassLoader loader) {
-        return context.openProtectedResource(resourcePath, loader);
+    /** 从模块 Jar 中读取资源 */
+    protected InputStream openResource(String resourcePath, ClassLoader loader) {
+        return context.openResource(resourcePath, loader);
     }
 
     /** 从模块 Jar 导出配置文件到宿主数据目录 */

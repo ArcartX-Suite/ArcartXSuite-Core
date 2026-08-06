@@ -462,7 +462,7 @@ cross.sendToServer("lobby", "my_channel", payload);
 
 ```java
 // 从模块 Jar 读取资源
-InputStream in = context.openProtectedResource("arcartx/ui/my_ui.yml", getClass().getClassLoader());
+InputStream in = context.openResource("arcartx/ui/my_ui.yml", getClass().getClassLoader());
 
 // 导出资源到宿主目录
 context.exportResource("config.yml", targetFile, false);

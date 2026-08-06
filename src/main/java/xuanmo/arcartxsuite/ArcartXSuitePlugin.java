@@ -185,7 +185,7 @@ public class ArcartXSuitePlugin extends JavaPlugin {
                 // 对于外部模块，优先走 ModuleRegistry
                 if (moduleRegistry != null && ownerId != null && !"axs-core".equalsIgnoreCase(ownerId)) {
                     try {
-                        InputStream input = moduleRegistry.openProtectedResource(ownerId, resourcePath, loader);
+                        InputStream input = moduleRegistry.openResource(ownerId, resourcePath, loader);
                         if (input != null) {
                             return input;
                         }

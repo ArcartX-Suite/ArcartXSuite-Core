@@ -171,13 +171,13 @@ public interface ModuleContext {
     // ─── 配置与资源工具 ───────────────────────────────────────
 
     /**
-     * 从模块 Jar 中读取受保护的资源。
+     * 从模块 Jar 中读取资源。
      *
      * @param resourcePath 资源路径（相对于模块 Jar 根目录）
      * @param loader       模块的 ClassLoader
      * @return 输入流，资源不存在时返回 null
      */
-    InputStream openProtectedResource(String resourcePath, ClassLoader loader);
+    InputStream openResource(String resourcePath, ClassLoader loader);
 
     /**
      * 导出模块内置资源到目标文件。
