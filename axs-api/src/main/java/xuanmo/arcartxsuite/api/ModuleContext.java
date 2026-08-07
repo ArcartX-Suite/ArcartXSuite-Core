@@ -15,6 +15,7 @@ import xuanmo.arcartxsuite.api.bridge.ApiStability;
 import xuanmo.arcartxsuite.api.bridge.ClientBridgeAPI;
 import xuanmo.arcartxsuite.api.bridge.ItemBridgeAPI;
 import xuanmo.arcartxsuite.api.bridge.PacketBridgeAPI;
+import xuanmo.arcartxsuite.api.bridge.VanillaItemNameBridge;
 import xuanmo.arcartxsuite.api.attribute.AttributeBridgeRegistry;
 import xuanmo.arcartxsuite.api.condition.ScriptConditionEvaluator;
 import xuanmo.arcartxsuite.api.crossserver.CrossServerAPI;
@@ -45,31 +46,6 @@ public interface ModuleContext {
     /** 模块私有数据目录（plugins/ArcartXSuite/data/<moduleId>/） */
     File dataFolder();
 
-    /**
-     * 把宿主根目录下的 legacy 文件（含同名 -shm / -wal 后缀）一次性搬迁到 {@link #dataFolder()}，
-     * 并返回 {@code dataFolder()}。用于将 1.0.x 时代散落在 {@code plugins/ArcartXSuite/} 根目录
-     * 的模块数据（如 {@code chat.db}、{@code chat.db-shm}、{@code chat.db-wal}）归位到
-     * {@code plugins/ArcartXSuite/data/<moduleId>/} 子目录。
-     * <p>
-     * 若根目录无对应文件、或目标文件已存在，则不做任何动作。仅记录 {@code INFO} 级日志。
-     *
-     * @param baseFileName 例如 {@code "chat.db"}，会同时尝试迁移 {@code chat.db-shm}/{@code chat.db-wal}
-     * @return 当前模块的 {@link #dataFolder()}
-     */
-    File migrateLegacyDataFile(String baseFileName);
-
-    /**
-     * 把宿主根目录下的 legacy 子目录一次性整体搬迁到 {@link #dataFolder()} 下的同名相对路径。
-     * 用于把 1.0.x 时代散落的 {@code chat/}、{@code mail/}、{@code prop/}、{@code subtitle/}
-     * 等模块产物目录归位到 {@code plugins/ArcartXSuite/data/<moduleId>/<relativePath>/}。
-     * <p>
-     * 若根目录无对应目录、或目标目录已存在，则不做任何动作。仅记录 {@code INFO} 级日志。
-     *
-     * @param relativePath 相对路径，例如 {@code "chat/channels"}、{@code "subtitle/groups"}
-     * @return {@code new File(dataFolder(), relativePath)}
-     */
-    File migrateLegacyDirectory(String relativePath);
-
     /** UI 文件输出目录（plugins/ArcartXSuite/ui/） */
     File uiFolder();
 
@@ -93,6 +69,17 @@ public interface ModuleContext {
     @ApiStability.Stable
     ItemSourceRegistry itemSourceRegistry();
 
+    /**
+     * 获取原版物品中文名称解析桥接（永不为 null）。
+     * <p>
+     * 用于显示原版物品名、入库搜索文本、聊天物品预览等场景，
+     * 避免各模块直接显示英文材质名。
+     *
+     * @since 1.3.3
+     */
+    @ApiStability.Stable
+    @NotNull VanillaItemNameBridge vanillaItemNameBridge();
+
     /** 获取全局物品匹配器 */
     @ApiStability.Stable
     ItemMatcherAPI itemMatcher();
@@ -105,7 +92,7 @@ public interface ModuleContext {
     @ApiStability.Stable
     AttributeBridgeRegistry attributeBridge();
 
-    /** 获取 Blink/Aria 脚本桥接（需服务器安装 Blink 系插件并启用 Aria；不可用时 available() 为 false） */
+    /** 获取 ArcartX 内置 Aria 脚本桥接（不可用时 available() 为 false） */
     @ApiStability.Stable
     @NotNull AriaBridge ariaBridge();
 
@@ -128,6 +115,10 @@ public interface ModuleContext {
     /** 创建新的 Adyeshach NPC 桥接实例（模块独立管理生命周期） */
     @ApiStability.Internal
     @NotNull xuanmo.arcartxsuite.api.bridge.AdyeshachNpcBridgeAPI createAdyeshachNpcBridge();
+
+    /** 创建新的 ArcartX 音效播放器桥接实例（模块独立管理生命周期） */
+    @ApiStability.Internal
+    @NotNull xuanmo.arcartxsuite.api.bridge.SoundPlayerBridgeAPI createSoundPlayerBridge();
 
     // ─── 模块间通信 ───────────────────────────────────────────
 
@@ -275,6 +266,23 @@ public interface ModuleContext {
      * @param priority 优先级（默认 0，EventPacket 建议使用 100）
      */
     void registerClientPacketHandler(ClientPacketHandler handler, int priority);
+
+    /**
+     * Registers a packet handler with optional route-layer ownership metadata.
+     *
+     * @param handler packet handler
+     * @param priority handler priority
+     * @param packetId owned packet ID, or {@code null} for legacy registration
+     * @param guardModule canonical PacketGuard module key, or {@code null} for the module ID
+     */
+    default void registerClientPacketHandler(
+        ClientPacketHandler handler,
+        int priority,
+        String packetId,
+        String guardModule
+    ) {
+        registerClientPacketHandler(handler, priority);
+    }
 
     /**
      * 注册客户端初始化完成处理器。

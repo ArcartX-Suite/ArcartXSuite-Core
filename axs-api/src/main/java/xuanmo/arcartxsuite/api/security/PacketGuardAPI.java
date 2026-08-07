@@ -11,13 +11,15 @@ import org.bukkit.entity.Player;
 public interface PacketGuardAPI {
 
     /**
-     * 检查是否允许此次包通过频率限制。
+     * Allows an operation according to the configured module/action rate rule.
+     * Incoming packet handlers are guarded centrally by the framework route
+     * layer and should not call this method for packet throttling.
      *
-     * @param player       玩家
-     * @param module       模块标识（如 "warehouse"）
-     * @param action       动作标识（如 "buy"）
-     * @param debugLogging 是否输出调试日志
-     * @return true 如果允许通过
+     * @param player       player identity
+     * @param module       module key, such as {@code warehouse}
+     * @param action       action key, such as {@code buy}
+     * @param debugLogging whether to emit debug logging
+     * @return true when the operation is allowed
      */
     boolean allow(Player player, String module, String action, boolean debugLogging);
 }

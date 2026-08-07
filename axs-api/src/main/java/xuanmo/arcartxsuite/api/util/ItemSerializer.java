@@ -15,6 +15,12 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.util.io.BukkitObjectInputStream;
 import org.bukkit.util.io.BukkitObjectOutputStream;
 
+/**
+ * 物品序列化工具，基于 Bukkit 的对象流，并兼容 Mohist 等混合服务端的反序列化。
+ * <p>
+ * 反序列化失败时降级到兼容路径：解包 {@code Wrapper} 旧对象、递归清洗 ItemMeta 中
+ * 复杂 NBT 值（转为 SNBT 字符串），以适配拒绝嵌套 NBT 的平台。
+ */
 public final class ItemSerializer {
 
     private static final String WRAPPER_CLASS_NAME = "org.bukkit.util.io.Wrapper";
@@ -22,6 +28,13 @@ public final class ItemSerializer {
     private ItemSerializer() {
     }
 
+    /**
+     * 将物品序列化为字节数组。
+     *
+     * @param itemStack 待序列化物品，null/空气返回空数组
+     * @return 序列化字节
+     * @throws IllegalStateException 序列化失败时抛出
+     */
     public static byte[] serialize(ItemStack itemStack) {
         if (itemStack == null || itemStack.getType().isAir()) {
             return new byte[0];
@@ -36,6 +49,15 @@ public final class ItemSerializer {
         }
     }
 
+    /**
+     * 从字节数组反序列化物品。
+ * <p>
+ * 先尝试 Bukkit 标准路径，失败时降级到兼容路径（处理 Mohist 等平台）。
+     *
+     * @param bytes 序列化字节，null/空数组返回 null
+     * @return 物品；无法反序列化时抛出 IllegalStateException
+     * @throws IllegalStateException 反序列化失败时抛出
+     */
     public static ItemStack deserialize(byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
             return null;

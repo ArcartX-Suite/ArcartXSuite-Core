@@ -5,6 +5,12 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+/**
+ * {@link ScriptConditionEvaluator} 的兜底实现，不依赖 Aria/JS 运行时。
+ * <p>
+ * 仅支持占位符 + 运算符的本地求值；遇到 ARIA 类型条件直接判定为失败
+ * （因为无法执行脚本）。作为脚本桥接不可用时的单例兜底。
+ */
 final class NoopScriptConditionEvaluator implements ScriptConditionEvaluator {
 
     static final NoopScriptConditionEvaluator INSTANCE = new NoopScriptConditionEvaluator();

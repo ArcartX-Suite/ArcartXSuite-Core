@@ -59,6 +59,7 @@ public abstract class AbstractAXSModule implements AXSModule {
     protected @Nullable xuanmo.arcartxsuite.api.bridge.ItemBridgeAPI itemStackBridge;
     protected xuanmo.arcartxsuite.api.item.ItemSourceRegistry itemSourceRegistry;
     protected xuanmo.arcartxsuite.api.item.ItemMatcherAPI itemMatcher;
+    protected @NotNull xuanmo.arcartxsuite.api.bridge.VanillaItemNameBridge vanillaItemNameBridge;
     protected xuanmo.arcartxsuite.api.currency.CurrencyBridgeAPI currencyManager;
     protected xuanmo.arcartxsuite.api.attribute.AttributeBridgeRegistry attributeBridge;
     protected @NotNull xuanmo.arcartxsuite.api.script.AriaBridge ariaBridge;
@@ -250,6 +251,20 @@ public abstract class AbstractAXSModule implements AXSModule {
     }
 
     /**
+     * Packet ID owned by this module for centralized route-layer guarding.
+     */
+    protected @Nullable String packetOwnershipPacketId() {
+        return null;
+    }
+
+    /**
+     * Canonical PacketGuard module key for the owned packet.
+     */
+    protected @Nullable String packetGuardModuleKey() {
+        return null;
+    }
+
+    /**
      * 创建客户端初始化完成处理器。返回 null 表示不需要客户端初始化通知。
      */
     @Nullable
@@ -298,6 +313,7 @@ public abstract class AbstractAXSModule implements AXSModule {
         this.itemStackBridge = context.itemStackBridge();
         this.itemSourceRegistry = context.itemSourceRegistry();
         this.itemMatcher = context.itemMatcher();
+        this.vanillaItemNameBridge = context.vanillaItemNameBridge();
         this.currencyManager = context.currencyManager();
         this.attributeBridge = context.attributeBridge();
         this.ariaBridge = context.ariaBridge();
@@ -353,7 +369,12 @@ public abstract class AbstractAXSModule implements AXSModule {
             // 7. 注册客户端包处理器
             ClientPacketHandler packetHandler = createPacketHandler();
             if (packetHandler != null) {
-                context.registerClientPacketHandler(packetHandler, packetHandlerPriority());
+                context.registerClientPacketHandler(
+                    packetHandler,
+                    packetHandlerPriority(),
+                    packetOwnershipPacketId(),
+                    packetGuardModuleKey()
+                );
             }
 
             // 8. 注册客户端初始化处理器
@@ -484,6 +505,12 @@ public abstract class AbstractAXSModule implements AXSModule {
         return context.createAdyeshachNpcBridge();
     }
 
+    /** 创建新的 ArcartX 音效播放器桥接实例 */
+    @NotNull
+    protected xuanmo.arcartxsuite.api.bridge.SoundPlayerBridgeAPI createSoundPlayerBridge() {
+        return context.createSoundPlayerBridge();
+    }
+
     /** 导出模块内置资源到目标文件 */
     protected void exportResource(String resourcePath, File target, boolean overwrite) {
         context.exportResource(resourcePath, target, overwrite);
@@ -572,7 +599,7 @@ public abstract class AbstractAXSModule implements AXSModule {
      * 导出并加载外部化消息文件。
      * <p>
      * 与 {@link #ensureConfigExists()} 同样走 {@link ModuleContext#exportConfigResource}，
-     * 以便正确解密付费模块的加密资源（.axb / .axl）。文件落到
+     * 从模块 Jar 中读取资源并落到
      * {@code data/<moduleId>/<fileName>}，用户编辑后 reload 即可生效。
      */
     private void initMessages() {
@@ -584,7 +611,7 @@ public abstract class AbstractAXSModule implements AXSModule {
         File moduleDataFolder = context.dataFolder();
         File messagesFile = new File(moduleDataFolder, fileName);
         if (!messagesFile.exists()) {
-            // 走宿主导出（处理加密资源解密），目标相对 pluginDataFolder
+            // 走宿主导出（从模块 Jar 读取资源），目标相对 pluginDataFolder
             context.exportConfigResource(
                 fileName,
                 "data/" + moduleDataFolder.getName() + "/" + fileName,
@@ -592,7 +619,9 @@ public abstract class AbstractAXSModule implements AXSModule {
                 moduleClassLoader()
             );
         }
-        messages = new MessageProvider(moduleDataFolder, fileName, moduleClassLoader(), context.logger());
+        messages = new MessageProvider(
+            moduleDataFolder, fileName, moduleClassLoader(), context.logger(),
+            resourcePath -> openResource(resourcePath, moduleClassLoader()));
         messages.load();
         context.logger().fine(descriptor().name() + " 已加载 " + messages.size() + " 条消息。");
     }
@@ -742,5 +771,4 @@ public abstract class AbstractAXSModule implements AXSModule {
         return null;
     }
 }
-
 

@@ -20,6 +20,10 @@ public record ScriptCondition(
         "^(%[^%]+%)\\s+(==|!=|>=|<=|>|<|contains|regex)\\s+(.+)$",
         Pattern.CASE_INSENSITIVE
     );
+    private static final Pattern INLINE_CONTEXT_PATTERN = Pattern.compile(
+        "^(\\{[^}]+\\})\\s+(==|!=|>=|<=|>|<|contains|regex)\\s+(.+)$",
+        Pattern.CASE_INSENSITIVE
+    );
     private static final Pattern INLINE_ARIA_PREFIX = Pattern.compile("^aria\\s*:\\s*(.+)$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern INLINE_JS_PREFIX = Pattern.compile("^js\\s*:\\s*(.+)$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
@@ -35,6 +39,11 @@ public record ScriptCondition(
         return new ScriptCondition(ScriptConditionKind.JS, null, null, null, script, raw);
     }
 
+    /** 上下文变量条件：左侧为 {variable}，右侧可为 {variable} 或字面量，评估时从变量表取值。 */
+    public static ScriptCondition context(String placeholder, ScriptConditionOperator operator, String value, String raw) {
+        return new ScriptCondition(ScriptConditionKind.CONTEXT, placeholder, operator, value, null, raw);
+    }
+
     @Nullable
     public static ScriptCondition parseInline(String inline) {
         if (inline == null || inline.isBlank()) {
@@ -44,18 +53,24 @@ public record ScriptCondition(
         Matcher jsMatcher = INLINE_JS_PREFIX.matcher(trimmed);
         if (jsMatcher.matches()) {
             String script = jsMatcher.group(1).trim();
-            return script.isBlank() ? null : js(trimmed, trimmed);
+            return script.isBlank() ? null : js(script, trimmed);
         }
         Matcher ariaMatcher = INLINE_ARIA_PREFIX.matcher(trimmed);
         if (ariaMatcher.matches()) {
             String script = ariaMatcher.group(1).trim();
-            return script.isBlank() ? null : aria(trimmed, trimmed);
+            return script.isBlank() ? null : aria(script, trimmed);
+        }
+        Matcher contextMatcher = INLINE_CONTEXT_PATTERN.matcher(trimmed);
+        if (contextMatcher.matches()) {
+            return context(
+                contextMatcher.group(1).trim(),
+                ScriptConditionOperator.parse(contextMatcher.group(2).trim()),
+                contextMatcher.group(3).trim(),
+                trimmed
+            );
         }
         Matcher papiMatcher = INLINE_PAPI_PATTERN.matcher(trimmed);
         if (!papiMatcher.matches()) {
-            if (trimmed.contains("::")) {
-                return deserialize(trimmed.replace("::", "\t"));
-            }
             return null;
         }
         return papi(
@@ -79,17 +94,13 @@ public record ScriptCondition(
             return parseJsSection(section);
         }
         String jsInline = firstNonBlank(
-            section.getString("js"),
-            section.getString("js-condition"),
-            section.getString("jsCondition")
+            section.getString("js")
         );
         if (jsInline != null) {
             return js(jsInline, jsInline);
         }
         String ariaInline = firstNonBlank(
-            section.getString("aria"),
-            section.getString("aria-condition"),
-            section.getString("ariaCondition")
+            section.getString("aria")
         );
         if (ariaInline != null) {
             return aria(ariaInline, ariaInline);
@@ -159,6 +170,9 @@ public record ScriptCondition(
             String payload = script == null ? "" : script;
             return "aria\t" + Base64.getEncoder().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         }
+        if (kind == ScriptConditionKind.CONTEXT) {
+            return raw == null ? "" : raw;
+        }
         String ph = placeholder == null ? "" : placeholder;
         String val = value == null ? "" : value;
         ScriptConditionOperator op = operator == null ? ScriptConditionOperator.EQ : operator;
@@ -171,11 +185,8 @@ public record ScriptCondition(
             return null;
         }
         String trimmed = rawValue.trim();
-        if (trimmed.startsWith("js\t") || trimmed.startsWith("js::")) {
-            String encoded = trimmed.substring(trimmed.indexOf('\t') >= 0 ? trimmed.indexOf('\t') + 1 : 3);
-            if (trimmed.startsWith("js::")) {
-                encoded = trimmed.substring("js::".length());
-            }
+        if (trimmed.startsWith("js\t")) {
+            String encoded = trimmed.substring(3);
             try {
                 String script = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
                 return js(script, trimmed);
@@ -183,11 +194,8 @@ public record ScriptCondition(
                 return js(encoded, trimmed);
             }
         }
-        if (trimmed.startsWith("aria\t") || trimmed.startsWith("aria::")) {
-            String encoded = trimmed.substring(trimmed.indexOf('\t') >= 0 ? trimmed.indexOf('\t') + 1 : 6);
-            if (trimmed.startsWith("aria::")) {
-                encoded = trimmed.substring("aria::".length());
-            }
+        if (trimmed.startsWith("aria\t")) {
+            String encoded = trimmed.substring(5);
             try {
                 String script = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
                 return aria(script, trimmed);
@@ -200,9 +208,6 @@ public record ScriptCondition(
             return inline;
         }
         String[] parts = trimmed.split("\t", 3);
-        if (parts.length < 3) {
-            parts = trimmed.split("::", 3);
-        }
         if (parts.length < 3) {
             return null;
         }

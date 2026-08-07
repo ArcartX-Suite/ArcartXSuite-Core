@@ -114,6 +114,13 @@ public abstract class AbstractModuleRepository {
         return dataSource != null && !dataSource.isClosed();
     }
 
+    /**
+     * 获取底层 HikariCP 数据源，供 DAO 或服务层直接使用。
+     */
+    public final javax.sql.DataSource dataSource() {
+        return dataSource;
+    }
+
     // ─── 玩家数据删除 ────────────────────────────────────────
 
     /**

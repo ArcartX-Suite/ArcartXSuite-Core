@@ -3,16 +3,36 @@ package xuanmo.arcartxsuite.api.condition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.MemoryConfiguration;
 import org.jetbrains.annotations.NotNull;
 
+/**
+ * 脚本条件加载器，从 YAML 配置节解析出 {@link ScriptCondition} 列表。
+ * <p>
+ * 支持三种配置形态：内联字符串列表、Map 列表、嵌套配置节。提供针对常见键名
+ * （open-requirements / requirements / use-conditions / conditions / claim-conditions）
+ * 的便捷方法。
+ */
 public final class ScriptConditionsLoader {
 
     private ScriptConditionsLoader() {
     }
 
-    public static @NotNull List<ScriptCondition> load(ConfigurationSection section, String... keys) {
+    /**
+     * 从指定配置节的多个键中加载条件列表。
+ * <p>
+ * 每个键会依次尝试：内联字符串列表、Map 列表、嵌套配置节三种解析方式。
+     *
+     * @param section 配置节，null 返回空列表
+     * @param keys    要读取的键名数组
+     * @return 不可变条件列表
+     */
+    public static @NotNull List<ScriptCondition> load(
+        ConfigurationSection section,
+        String... keys
+    ) {
         if (section == null || keys == null || keys.length == 0) {
             return List.of();
         }
@@ -21,13 +41,11 @@ public final class ScriptConditionsLoader {
             if (key == null || key.isBlank()) {
                 continue;
             }
-            boolean ariaKey = isAriaKey(key);
-            boolean jsKey = isJsKey(key);
-            appendInlineLines(conditions, section.getStringList(key), ariaKey, jsKey);
+            appendInlineLines(conditions, section.getStringList(key));
             appendMapList(conditions, section.getMapList(key));
             ConfigurationSection nested = section.getConfigurationSection(key);
             if (nested != null) {
-                appendInlineLines(conditions, nested.getStringList("list"), ariaKey, jsKey);
+                appendInlineLines(conditions, nested.getStringList("list"));
                 for (String childKey : nested.getKeys(false)) {
                     ConfigurationSection child = nested.getConfigurationSection(childKey);
                     if (child != null) {
@@ -42,16 +60,93 @@ public final class ScriptConditionsLoader {
         return List.copyOf(conditions);
     }
 
-    public static @NotNull List<ScriptCondition> loadInlineLines(List<String> lines) {
+    /** 加载 {@code open-requirements} 键下的条件列表。 */
+    public static @NotNull List<ScriptCondition> loadOpenRequirements(
+        ConfigurationSection section
+    ) {
+        return load(section, "open-requirements");
+    }
+
+    /** 加载 {@code requirements} 键下的条件列表（查看条件）。 */
+    public static @NotNull List<ScriptCondition> loadViewConditions(
+        ConfigurationSection section
+    ) {
+        return load(section, "requirements");
+    }
+
+    /** 加载 {@code use-conditions} 键下的条件列表（使用条件）。 */
+    public static @NotNull List<ScriptCondition> loadUseConditions(
+        ConfigurationSection section
+    ) {
+        return load(section, "use-conditions");
+    }
+
+    /** 加载 {@code conditions} 键下的条件列表（模块级条件）。 */
+    public static @NotNull List<ScriptCondition> loadModuleConditions(
+        ConfigurationSection section
+    ) {
+        return load(section, "conditions");
+    }
+
+    /**
+     * 加载 {@code conditions} 键下的条件列表，并在解析结果为空但原始数据存在时
+     * 记录警告日志（用于提示用户配置格式错误）。
+     *
+     * @param section       配置节
+     * @param logger        日志器，null 时不记录
+     * @param invalidPrefix 警告前缀文本
+     * @return 不可变条件列表
+     */
+    public static @NotNull List<ScriptCondition> loadModuleConditions(
+        ConfigurationSection section,
+        Logger logger,
+        String invalidPrefix
+    ) {
+        List<ScriptCondition> conditions = loadModuleConditions(section);
+        if (conditions.isEmpty() && logger != null && section != null) {
+            List<?> rawConditions = section.getList("conditions");
+            if (rawConditions != null) {
+                for (Object rawCondition : rawConditions) {
+                    String line = rawCondition == null
+                        ? ""
+                        : String.valueOf(rawCondition).trim();
+                    if (!line.isBlank()) {
+                        logger.warning(invalidPrefix + line);
+                    }
+                }
+            }
+        }
+        return conditions;
+    }
+
+    /** 加载 {@code claim-conditions} 键下的条件列表（领取条件）。 */
+    public static @NotNull List<ScriptCondition> loadClaimConditions(
+        ConfigurationSection section
+    ) {
+        return load(section, "claim-conditions");
+    }
+
+    /**
+     * 将内联字符串行列表解析为条件列表，每行尝试内联解析或反序列化。
+     *
+     * @param lines 原始行列表，null/空返回空列表
+     * @return 不可变条件列表
+     */
+    public static @NotNull List<ScriptCondition> loadInlineLines(
+        List<String> lines
+    ) {
         if (lines == null || lines.isEmpty()) {
             return List.of();
         }
         List<ScriptCondition> conditions = new ArrayList<>();
-        appendInlineLines(conditions, lines, false, false);
+        appendInlineLines(conditions, lines);
         return List.copyOf(conditions);
     }
 
-    private static void appendInlineLines(List<ScriptCondition> target, List<String> lines, boolean forceAria, boolean forceJs) {
+    private static void appendInlineLines(
+        List<ScriptCondition> target,
+        List<String> lines
+    ) {
         if (lines == null) {
             return;
         }
@@ -59,22 +154,20 @@ public final class ScriptConditionsLoader {
             if (line == null || line.isBlank()) {
                 continue;
             }
-            if (forceJs) {
-                target.add(ScriptCondition.js(line.trim(), line.trim()));
-                continue;
-            }
-            if (forceAria) {
-                target.add(ScriptCondition.aria(line.trim(), line.trim()));
-                continue;
-            }
             ScriptCondition condition = ScriptCondition.parseInline(line);
+            if (condition == null) {
+                condition = ScriptCondition.deserialize(line);
+            }
             if (condition != null) {
                 target.add(condition);
             }
         }
     }
 
-    private static void appendMapList(List<ScriptCondition> target, List<Map<?, ?>> maps) {
+    private static void appendMapList(
+        List<ScriptCondition> target,
+        List<Map<?, ?>> maps
+    ) {
         if (maps == null) {
             return;
         }
@@ -100,23 +193,5 @@ public final class ScriptConditionsLoader {
                 target.add(structured);
             }
         }
-    }
-
-    private static boolean isAriaKey(String key) {
-        String normalized = key.trim().toLowerCase();
-        return normalized.equals("aria")
-            || normalized.equals("aria-conditions")
-            || normalized.equals("ariaconditions")
-            || normalized.equals("aria-condition")
-            || normalized.equals("ariacondition");
-    }
-
-    private static boolean isJsKey(String key) {
-        String normalized = key.trim().toLowerCase();
-        return normalized.equals("js")
-            || normalized.equals("js-conditions")
-            || normalized.equals("jsconditions")
-            || normalized.equals("js-condition")
-            || normalized.equals("jscondition");
     }
 }

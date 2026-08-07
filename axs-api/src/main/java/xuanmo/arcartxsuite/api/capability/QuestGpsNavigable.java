@@ -26,6 +26,9 @@ public interface QuestGpsNavigable {
     /** 追踪任务的指定步骤 */
     void trackTask(@NotNull Player player, @NotNull String questId, @NotNull String taskId);
 
-    /** 检查事件规则是否被锁定 */
+    /** 检查事件规则是否被主线门禁锁定 */
     boolean eventRuleLocked(@NotNull Player player, @NotNull String ruleId);
+
+    /** 检查其他模块入口是否被主线门禁锁定 */
+    boolean moduleEntryLocked(@NotNull Player player, @NotNull String moduleEntryId);
 }

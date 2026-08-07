@@ -62,6 +62,9 @@ public interface PacketBridgeAPI {
     /** 向玩家关闭指定 UI */
     boolean closeUi(@NotNull Player player, @NotNull String uiId);
 
+    /** 返回玩家当前是否由本桥接记录为已打开指定 UI */
+    boolean isUiOpen(@NotNull Player player, @NotNull String uiId);
+
     /** 批量打开 */
     boolean openUiAll(@NotNull Player player, @NotNull List<String> uiIds);
 
