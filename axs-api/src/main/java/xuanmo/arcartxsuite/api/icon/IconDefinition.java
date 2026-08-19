@@ -26,6 +26,7 @@ import org.jetbrains.annotations.Nullable;
  * @param texture         图标纹理标识，写入 NBT {@code icon} 标签
  * @param textureUrl      纹理 URL，写入 NBT {@code url} 标签
  * @param nbt             自定义 NBT 键值对
+ * @param nbtString       自定义 NBT 的整段 SNBT 写法，与 {@code nbt} 键值对二选一
  * @param glow            是否附魔发光
  * @param skullTexture    头颅纹理（Base64 或 URL）
  * @param color           皮革染色颜色（十六进制）
@@ -44,6 +45,7 @@ public record IconDefinition(
     String texture,
     String textureUrl,
     java.util.Map<String, String> nbt,
+    String nbtString,
     boolean glow,
     String skullTexture,
     String color
@@ -65,6 +67,44 @@ public record IconDefinition(
             return true;
         }
         return material != null && !material.isBlank();
+    }
+
+    /**
+     * 从父配置节的指定键加载图标定义，同时兼容配置节写法与字符串简写。
+     *
+     * @param parent 父配置节
+     * @param key    图标所在的键名
+     * @return 解析后的图标定义，无有效图标时返回 {@code null}
+     */
+    @Nullable
+    public static IconDefinition load(ConfigurationSection parent, String key) {
+        if (parent == null || key == null) {
+            return null;
+        }
+        ConfigurationSection section = parent.getConfigurationSection(key);
+        if (section != null) {
+            return load(section);
+        }
+        return load(parent.getString(key));
+    }
+
+    /**
+     * 从字符串简写加载图标定义，以 <code>{</code> 开头视为物品 JSON，否则视为材质名。
+     *
+     * @param value 图标字符串，物品 JSON 或原版材质名
+     * @return 解析后的图标定义，空值时返回 {@code null}
+     */
+    @Nullable
+    public static IconDefinition load(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.startsWith("{")
+            ? new IconDefinition("", 1, "", java.util.List.of(), 0, "", "", "", "",
+                trimmed, "", "", java.util.Map.of(), "", false, "", "")
+            : new IconDefinition(trimmed, 1, "", java.util.List.of(), 0, "", "", "", "",
+                "", "", "", java.util.Map.of(), "", false, "", "");
     }
 
     /**
@@ -92,6 +132,7 @@ public record IconDefinition(
             section.getString("texture", ""),
             section.getString("texture-url", section.getString("url", "")),
             loadNbt(section),
+            loadNbtString(section),
             section.getBoolean("glow", false),
             section.getString("skull-texture", section.getString("skullTexture", "")),
             section.getString("color", "")
@@ -112,5 +153,15 @@ public record IconDefinition(
             }
         }
         return map;
+    }
+
+    /**
+     * 读取 {@code nbt} 的标量写法，即整段 SNBT 字符串；写成配置节时返回空字符串。
+     */
+    private static String loadNbtString(ConfigurationSection section) {
+        if (section.getConfigurationSection("nbt") != null) {
+            return "";
+        }
+        return section.getString("nbt", "");
     }
 }

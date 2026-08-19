@@ -2,6 +2,8 @@ package xuanmo.arcartxsuite.api.item;
 
 import java.util.List;
 import java.util.Set;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import java.util.function.Function;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
@@ -87,6 +89,10 @@ public final class ItemMatcherSupport implements ItemMatcherAPI {
         if (!matcher.nbtKeys().isEmpty() && matcher.nbtKeys().stream().noneMatch(key -> hasNbtKey(itemStack, key))) {
             return false;
         }
+        if (!matcher.nbtValues().isEmpty() && matcher.nbtValues().entrySet().stream()
+            .anyMatch(entry -> !hasNbtValue(itemStack, entry.getKey(), entry.getValue()))) {
+            return false;
+        }
         if (!matcher.namePatterns().isEmpty() && matcher.namePatterns().stream().noneMatch(pattern -> pattern.matcher(features.normalizedName()).find())) {
             return false;
         }
@@ -94,6 +100,78 @@ public final class ItemMatcherSupport implements ItemMatcherAPI {
             return false;
         }
         return true;
+    }
+
+    private static boolean hasNbtValue(ItemStack itemStack, String configuredKey, String expectedValue) {
+        if (configuredKey == null || configuredKey.isBlank()) {
+            return false;
+        }
+        String expectedKey = ItemMatcherLoader.normalizeId(configuredKey);
+        ItemMeta meta = itemStack.getItemMeta();
+        if (meta != null) {
+            PersistentDataContainer pdc = meta.getPersistentDataContainer();
+            for (NamespacedKey key : pdc.getKeys()) {
+                if (!RawNbtAccess.matchesNbtKey(expectedKey, key.toString())
+                    && !RawNbtAccess.matchesNbtKey(expectedKey, key.getKey())) {
+                    continue;
+                }
+                String actualValue = readPdcValue(pdc, key);
+                if (actualValue != null) {
+                    return valuesEqual(expectedValue, actualValue);
+                }
+            }
+        }
+        String actualValue = RawNbtAccess.value(itemStack, expectedKey);
+        return actualValue != null && valuesEqual(expectedValue, actualValue);
+    }
+
+    private static String readPdcValue(PersistentDataContainer pdc, NamespacedKey key) {
+        String stringValue = pdc.get(key, PersistentDataType.STRING);
+        if (stringValue != null) return stringValue;
+        Integer integerValue = pdc.get(key, PersistentDataType.INTEGER);
+        if (integerValue != null) return String.valueOf(integerValue);
+        Long longValue = pdc.get(key, PersistentDataType.LONG);
+        if (longValue != null) return String.valueOf(longValue);
+        Byte byteValue = pdc.get(key, PersistentDataType.BYTE);
+        if (byteValue != null) return String.valueOf(byteValue);
+        Double doubleValue = pdc.get(key, PersistentDataType.DOUBLE);
+        return doubleValue == null ? null : String.valueOf(doubleValue);
+    }
+
+    private static boolean valuesEqual(String expected, String actual) {
+        String expectedText = normalizeValue(expected);
+        String actualText = normalizeValue(actual);
+        java.math.BigDecimal expectedNumber = parseNumber(expectedText);
+        java.math.BigDecimal actualNumber = parseNumber(actualText);
+        if (expectedNumber != null && actualNumber != null) {
+            return expectedNumber.compareTo(actualNumber) == 0;
+        }
+        return expectedText.equalsIgnoreCase(actualText);
+    }
+
+    private static String normalizeValue(String value) {
+        String normalized = ItemMatcherLoader.normalizeNbtValue(value);
+        if (normalized.length() >= 2) {
+            char first = normalized.charAt(0);
+            char last = normalized.charAt(normalized.length() - 1);
+            if ((first == '\'' && last == '\'') || (first == '"' && last == '"')) {
+                normalized = normalized.substring(1, normalized.length() - 1).trim();
+            }
+        }
+        return normalized;
+    }
+
+    private static java.math.BigDecimal parseNumber(String value) {
+        if (!value.matches("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[bBsSlLfFdD])?")) {
+            return null;
+        }
+        String numeric = value.length() > 1 && Character.isLetter(value.charAt(value.length() - 1))
+            ? value.substring(0, value.length() - 1) : value;
+        try {
+            return new java.math.BigDecimal(numeric);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private static boolean hasNbtKey(ItemStack itemStack, String configuredKey) {

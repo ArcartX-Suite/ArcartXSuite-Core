@@ -103,7 +103,21 @@ public final class IconResolver {
     }
 
     private ItemStack applyCustomNbt(ItemStack stack, IconDefinition icon) {
-        if (stack == null || itemStackBridge == null) {
+        if (stack == null) {
+            return stack;
+        }
+        if (icon.nbtString() != null && !icon.nbtString().isBlank()) {
+            try {
+                ItemStack modified =
+                    Bukkit.getUnsafe().modifyItemStack(stack.clone(), icon.nbtString());
+                if (modified != null) {
+                    stack = modified;
+                }
+            } catch (Exception ignored) {
+                // SNBT 解析失败时保留原物品
+            }
+        }
+        if (itemStackBridge == null) {
             return stack;
         }
         if (icon.texture() != null && !icon.texture().isBlank()) {

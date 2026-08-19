@@ -10,11 +10,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
+import xuanmo.arcartxsuite.api.capability.EventBusCapability;
 import xuanmo.arcartxsuite.api.placeholder.PlaceholderResolverAPI;
 
 public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
@@ -27,6 +29,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
     private volatile Map<String, CurrencyBridge> bridges;
     private final PlaceholderResolverAPI placeholderResolver;
     private final Map<UUID, Object> customOperationLocks = new ConcurrentHashMap<>();
+    private volatile Supplier<EventBusCapability> eventBusProvider;
 
     public CurrencyBridgeManager(JavaPlugin plugin) {
         this(plugin, Map.of(), null);
@@ -42,6 +45,24 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
         this.definitions = immutableCopy(this.registeredDefinitions);
         this.bridges = Map.of();
         this.placeholderResolver = placeholderResolver;
+    }
+
+    /**
+     * 注入事件总线提供者，用于在货币变动时分发 {@code axs.currency.spent} / {@code axs.currency.earned} 事件。
+     * <p>
+     * 事件 payload 包含：
+     * <ul>
+     *   <li>{@code currency_id} — 货币 ID</li>
+     *   <li>{@code amount} — 变动金额（字符串形式）</li>
+     *   <li>{@code action} — {@code "withdraw"} 或 {@code "deposit"}</li>
+     *   <li>{@code balance_after} — 变动后余额（字符串形式，可能为 "0"）</li>
+     * </ul>
+     * 设置为 {@code null} 可关闭事件分发。
+     *
+     * @param eventBusProvider 事件总线提供者
+     */
+    public void setEventBusProvider(Supplier<EventBusCapability> eventBusProvider) {
+        this.eventBusProvider = eventBusProvider;
     }
 
     public synchronized void initialize() {
@@ -99,13 +120,14 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
     }
 
     private CurrencyBridge createBridge(CurrencyDefinition definition) {
-        return switch (normalizeId(definition.provider())) {
+        CurrencyBridge delegate = switch (normalizeId(definition.provider())) {
             case "playerpoints" -> new PlayerPointsBridge(definition);
             case "xconomy" -> new XConomyCurrencyBridge(definition);
             case "placeholder-command", "command", "custom" -> new CommandCurrencyBridge(definition, placeholderResolver);
             case "rondo" -> new RondoCurrencyBridge(definition);
             default -> new VaultCurrencyBridge(definition);
         };
+        return new EventDispatchingBridge(delegate, definition.id());
     }
 
     private abstract class AbstractCurrencyBridge implements CurrencyBridge {
@@ -661,5 +683,87 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
             return "";
         }
         return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 事件分发装饰器，包装真实货币桥接，在 withdraw/deposit 成功后通过事件总线分发货币变动事件。
+     * <p>
+     * 分发的事件主题：
+     * <ul>
+     *   <li>{@code axs.currency.spent} — 扣款成功时</li>
+     *   <li>{@code axs.currency.earned} — 入账成功时</li>
+     * </ul>
+     */
+    private final class EventDispatchingBridge implements CurrencyBridge {
+
+        private final CurrencyBridge delegate;
+        private final String currencyId;
+
+        private EventDispatchingBridge(CurrencyBridge delegate, String currencyId) {
+            this.delegate = delegate;
+            this.currencyId = currencyId;
+        }
+
+        @Override
+        public CurrencyDefinition definition() {
+            return delegate.definition();
+        }
+
+        @Override
+        public boolean available() {
+            return delegate.available();
+        }
+
+        @Override
+        public String unavailableReason() {
+            return delegate.unavailableReason();
+        }
+
+        @Override
+        public BigDecimal balance(Player player) {
+            return delegate.balance(player);
+        }
+
+        @Override
+        public CurrencyTransactionResult withdraw(Player player, BigDecimal amount) {
+            CurrencyTransactionResult result = delegate.withdraw(player, amount);
+            if (result.success()) {
+                publishCurrencyEvent(player, "withdraw", amount);
+            }
+            return result;
+        }
+
+        @Override
+        public CurrencyTransactionResult deposit(Player player, BigDecimal amount) {
+            CurrencyTransactionResult result = delegate.deposit(player, amount);
+            if (result.success()) {
+                publishCurrencyEvent(player, "deposit", amount);
+            }
+            return result;
+        }
+
+        private void publishCurrencyEvent(Player player, String action, BigDecimal amount) {
+            Supplier<EventBusCapability> provider = eventBusProvider;
+            if (provider == null || player == null) return;
+            try {
+                EventBusCapability bus = provider.get();
+                if (bus == null) return;
+                String topic = "withdraw".equals(action) ? "axs.currency.spent" : "axs.currency.earned";
+                Map<String, String> payload = new LinkedHashMap<>(4);
+                payload.put("currency_id", currencyId);
+                payload.put("amount", amount == null ? "0" : amount.stripTrailingZeros().toPlainString());
+                payload.put("action", action);
+                // 尝试获取变动后余额（best-effort，失败不影响主流程）
+                try {
+                    BigDecimal balanceAfter = delegate.balance(player);
+                    payload.put("balance_after", balanceAfter.stripTrailingZeros().toPlainString());
+                } catch (Exception ignored) {
+                    payload.put("balance_after", "0");
+                }
+                bus.publish(topic, player, payload);
+            } catch (Exception ignored) {
+                // 事件分发失败不应影响货币操作主流程
+            }
+        }
     }
 }

@@ -203,6 +203,50 @@ final class RawNbtAccess {
         return null;
     }
 
+    private String findValue(
+        Object node,
+        String expected,
+        Set<Object> visited
+    ) throws ReflectiveOperationException {
+        if (node == null || !visited.add(node)) return null;
+        if (compoundClass.isInstance(node)) {
+            Set<?> keys = keys(node);
+            if (keys == null) return null;
+            for (Object rawKey : keys) {
+                String key = String.valueOf(rawKey);
+                Object child = get.invoke(node, key);
+                if (matchesNbtKey(expected, key)) {
+                    return child == null ? null : String.valueOf(child);
+                }
+                String nested = findValue(child, expected, visited);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+        if (listClass.isInstance(node) && listSize != null && listGet != null) {
+            int size = ((Number) listSize.invoke(node)).intValue();
+            for (int index = 0; index < size; index++) {
+                String nested = findValue(listGet.invoke(node, index), expected, visited);
+                if (nested != null) return nested;
+            }
+        }
+        return null;
+    }
+
+    static String value(ItemStack itemStack, String expected) {
+        try {
+            RawNbtAccess access = resolve();
+            if (access == null) return null;
+            Object nmsItem = access.asNmsCopy.invoke(null, itemStack);
+            Object root = access.readTag(nmsItem);
+            if (root == null) return null;
+            return access.findValue(root, expected,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
     private boolean contains(
         Object node,
         String expected,

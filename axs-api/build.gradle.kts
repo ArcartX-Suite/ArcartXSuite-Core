@@ -36,7 +36,3 @@ tasks.compileTestJava {
 tasks.test {
     useJUnitPlatform()
 }
-
-tasks.jar {
-    archiveBaseName.set("axs-api")
-}

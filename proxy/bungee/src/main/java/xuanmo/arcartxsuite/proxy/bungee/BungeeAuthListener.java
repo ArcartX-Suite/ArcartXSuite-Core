@@ -17,6 +17,11 @@ import xuanmo.arcartxsuite.proxy.common.auth.YggdrasilAuthenticator;
 import xuanmo.arcartxsuite.proxy.common.config.ProxyConfig;
 import xuanmo.arcartxsuite.proxy.common.model.AccountType;
 
+/**
+ * BungeeCord 代理端登录鉴权监听器，在 PreLogin/Login 阶段通过
+ * {@link YggdrasilAuthenticator} 校验玩家账号类型（正版/LittleSkin/离线），
+ * 并按 {@link ProxyConfig} 的策略拒绝或放行。
+ */
 public class BungeeAuthListener implements Listener {
 
     private final ArcartXSuiteBungee plugin;

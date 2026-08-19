@@ -5,6 +5,7 @@ import java.util.function.BiConsumer;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import xuanmo.arcartxsuite.api.bridge.ApiStability;
 
 /**
  * 模块间解耦事件总线能力接口（pub/sub 模式）。
@@ -39,6 +40,31 @@ public interface EventBusCapability {
      * @param payload   附加数据
      */
     void publish(@NotNull String topic, @Nullable Player player, @NotNull Map<String, String> payload);
+
+    /**
+     * 注册当前模块为指定主题的发布者。
+     * <p>
+     * 模块在 {@code onEnable} 时调用此方法声明自己会发布的事件主题，
+     * 以便其他模块在启动时通过 {@link #hasPublisher(String)} 检测是否可订阅。
+     * <p>
+     * 重复注册同一主题是安全的（幂等）。
+     *
+     * @param topic 事件主题
+     */
+    @ApiStability.Stable
+    void registerPublisher(@NotNull String topic);
+
+    /**
+     * 查询指定主题是否已有注册的发布者。
+     * <p>
+     * 用于在启动时判断某个 EventBus 主题是否有模块发布，
+     * 若无则可降级到其他事件源（如原版 Bukkit 事件）。
+     *
+     * @param topic 事件主题
+     * @return {@code true} 表示至少有一个模块已注册为该主题的发布者
+     */
+    @ApiStability.Stable
+    boolean hasPublisher(@NotNull String topic);
 
     /**
      * 订阅一个事件主题。

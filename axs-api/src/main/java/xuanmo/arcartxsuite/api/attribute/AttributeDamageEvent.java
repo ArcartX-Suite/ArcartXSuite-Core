@@ -9,21 +9,32 @@ import xuanmo.arcartxsuite.api.bridge.ApiStability;
 /**
  * 通用属性伤害事件。
  * <p>
- * 由 {@link AttributeBridgeRegistry} 统一从各属性插件（AttributePlus、CraneAttribute、MythicLib 等）
+ * 由 {@link AttributeBridgeRegistry} 统一从各属性插件（AttributePlus、CraneAttribute、MythicLib、Symphony 等）
  * 的伤害事件归一化后分发。模块无需关心底层属性插件种类，只需订阅此事件。
  *
- * @param attacker 攻击者（玩家），可能为 null（如环境伤害、NPC 伤害等）
- * @param target   被击中的实体
- * @param damage   伤害数值
- * @param source   伤害来源类型
+ * @param attacker  攻击者（玩家），可能为 null（如环境伤害、NPC 伤害等）
+ * @param target    被击中的实体
+ * @param damage    伤害数值
+ * @param source    伤害来源类型
+ * @param critical  是否暴击
+ * @param dodged    是否被闪避（dodged=true 时 damage 通常为 0）
+ * @param relation  元素克制关系，null 表示无克制系统
  */
 @ApiStability.Stable
 public record AttributeDamageEvent(
     @Nullable Player attacker,
     @NotNull Entity target,
     double damage,
-    @NotNull Source source
+    @NotNull Source source,
+    boolean critical,
+    boolean dodged,
+    @Nullable DamageRelation relation
 ) {
+
+    /** 兼容旧调用方的便捷构造方法 */
+    public AttributeDamageEvent(@Nullable Player attacker, @NotNull Entity target, double damage, @NotNull Source source) {
+        this(attacker, target, damage, source, false, false, null);
+    }
 
     /** 属性伤害来源类型 */
     @ApiStability.Stable
@@ -40,5 +51,16 @@ public record AttributeDamageEvent(
         BUKKIT,
         /** 未知/其他 */
         OTHER
+    }
+
+    /** 元素克制关系 */
+    @ApiStability.Stable
+    public enum DamageRelation {
+        /** 优势（克制对方） */
+        ADVANTAGED,
+        /** 中性 */
+        NEUTRAL,
+        /** 劣势（被克制） */
+        DISADVANTAGED
     }
 }

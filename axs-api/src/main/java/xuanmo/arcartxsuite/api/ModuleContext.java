@@ -3,7 +3,6 @@ package xuanmo.arcartxsuite.api;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Optional;
 import java.util.logging.Logger;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.event.Listener;
@@ -20,12 +19,14 @@ import xuanmo.arcartxsuite.api.attribute.AttributeBridgeRegistry;
 import xuanmo.arcartxsuite.api.condition.ScriptConditionEvaluator;
 import xuanmo.arcartxsuite.api.crossserver.CrossServerAPI;
 import xuanmo.arcartxsuite.api.currency.CurrencyBridgeAPI;
+import xuanmo.arcartxsuite.api.currency.RondoBridge;
 import xuanmo.arcartxsuite.api.item.ItemMatcherAPI;
 import xuanmo.arcartxsuite.api.item.ItemSourceRegistry;
 import xuanmo.arcartxsuite.api.placeholder.PlaceholderExpansionRegistry;
 import xuanmo.arcartxsuite.api.placeholder.PlaceholderResolverAPI;
 import xuanmo.arcartxsuite.api.security.PacketGuardAPI;
 import xuanmo.arcartxsuite.api.script.AriaBridge;
+import xuanmo.arcartxsuite.api.storage.StorageManager;
 
 /**
  * 宿主提供给模块的上下文接口。
@@ -88,6 +89,10 @@ public interface ModuleContext {
     @ApiStability.Stable
     CurrencyBridgeAPI currencyManager();
 
+    /** 获取 Rondo 经济系统桥接（排行榜/转账/快照/日志），Rondo 未安装时 available() 为 false */
+    @ApiStability.Stable
+    @NotNull RondoBridge rondoBridge();
+
     /** 获取全局属性桥接注册表（统一 AttributePlus/CraneAttribute/MythicLib/Symphony 桥接） */
     @ApiStability.Stable
     AttributeBridgeRegistry attributeBridge();
@@ -122,21 +127,8 @@ public interface ModuleContext {
 
     // ─── 模块间通信 ───────────────────────────────────────────
 
-    /**
-     * 按类型查找已加载的模块实例。
-     *
-     * @param moduleClass 目标模块的类
-     * @return 模块实例，未加载则返回 empty
-     */
-    <T extends AXSModule> Optional<T> getModule(Class<T> moduleClass);
-
-    /**
-     * 按 id 查找已加载的模块实例。
-     *
-     * @param moduleId 目标模块 id
-     * @return 模块实例，未加载则返回 empty
-     */
-    Optional<AXSModule> getModule(String moduleId);
+    // 模块间通信统一通过 Capability 机制（registerCapability / getCapability），
+    // 不再支持按模块 ID 或类直接查找模块实例。
 
     // ─── 安全 ─────────────────────────────────────────────────
 
@@ -203,6 +195,21 @@ public interface ModuleContext {
     /** 获取 ArcartX Prop 桥接（可能为 null） */
     @ApiStability.Internal
     @Nullable xuanmo.arcartxsuite.api.bridge.PropBridgeAPI propBridge();
+
+    /**
+     * 获取宿主统一数据源管理器（永不为 null）。
+     * <p>
+     * 由本体在启动时创建唯一一个 HikariCP 连接池并注入给所有模块。
+     * 模块通过它复用本体连接池，无需自行管理 {@code initialize()}/{@code shutdown()}。
+     * <p>
+     * 若模块在自身配置中声明了独立的 storage 节（覆盖模式），
+     * 可不使用此管理器而走自建模式（向后兼容）。
+     *
+     * @return 宿主数据源管理器
+     * @since 1.4.0
+     */
+    @ApiStability.Stable
+    @NotNull StorageManager storageManager();
 
     // ─── 事件与命令注册 ────────────────────────────────────────
 

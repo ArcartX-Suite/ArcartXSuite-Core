@@ -47,7 +47,20 @@ class MessageProviderTest {
     }
 
     @Test
-    @DisplayName("占位符 {0} 被替换")
+    @DisplayName("legacy runtime file merges bundled nested messages")
+    void bundledNestedDefaultsMergeIntoLegacyRuntimeFile() throws IOException {
+        File messagesFile = new File(tempDir, "message-provider-defaults.yml");
+        Files.writeString(messagesFile.toPath(), "prefix: Legacy\n", java.nio.charset.StandardCharsets.UTF_8);
+        MessageProvider provider = new MessageProvider(
+            tempDir, "message-provider-defaults.yml", getClass().getClassLoader(), LOGGER);
+        provider.load();
+        assertEquals("\u00a70仓库", provider.get("ui.warehouse-name", "仓库"));
+        assertEquals("\u00a70全部", provider.get("ui.all-text"));
+        assertEquals("\u00a70分类", provider.get("ui.category-name", "分类"));
+    }
+
+    @Test
+    @DisplayName("??? {0} ???")
     void singlePlaceholder() throws IOException {
         MessageProvider provider = newProviderWithContent("confirm: Confirm within {0} seconds");
         assertEquals("Confirm within 10 seconds", provider.get("confirm", 10));

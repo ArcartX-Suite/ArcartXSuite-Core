@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Logger;
+import javax.sql.DataSource;
 
 /**
  * 模块存储层统一基类。
@@ -17,48 +18,189 @@ import java.util.logging.Logger;
  * 封装 HikariCP 连接池初始化（MySQL / SQLite 双方言）、生命周期管理、
  * 以及玩家数据删除模板。子类只需关注建表逻辑和业务 SQL。
  *
- * <h3>使用方式</h3>
+ * <h3>两种模式</h3>
+ * <p>
+ * 自 1.4.0 起支持双模式，由构造方法决定：
+ *
+ * <h4>1. 共享模式（推荐，新模块优先使用）</h4>
+ * <p>
+ * 模块通过 {@link StorageManager} 复用本体统一管理的连接池，无需自行创建/关闭 HikariCP。
+ * 连接池生命周期由本体统一管控，彻底消除遗漏 {@code initialize()}/{@code shutdown()} 的问题。
  * <pre>{@code
- * public final class JdbcMyRepository extends AbstractModuleRepository {
- *     public JdbcMyRepository(File dataFolder, StorageConfig cfg, Logger logger) {
- *         super("AXS-MyModule", dataFolder, cfg.toDescriptor(), logger);
- *     }
- *     @Override protected void onInitialize(Connection conn) throws SQLException { ... }
- *     @Override protected List<String> playerDataTables() { return List.of("axs_my_table"); }
- *     @Override protected String playerUuidColumn() { return "player_uuid"; }
+ * public JdbcMyRepository(StorageManager sm, String tablePrefix, Logger logger) {
+ *     super("AXS-MyModule", sm, "mymodule", tablePrefix, logger);
  * }
  * }</pre>
+ * <ul>
+ *   <li>MySQL 模式：所有模块共享本体一个 HikariCP 连接池，各模块用 {@code tablePrefix} 隔离表。</li>
+ *   <li>SQLite 模式：各模块仍使用各自的 {@code <moduleId>.db} 文件，本体按模块名分配独立连接。</li>
+ *   <li>{@link #initialize()} 只建表，不建池（池由 {@link StorageManager} 管理）。</li>
+ *   <li>{@link #shutdown()} 关闭该模块对应的 SQLite 独立池（释放文件锁），MySQL 全局池不受影响。</li>
+ * </ul>
+ *
+ * <h4>2. 自建模式（向后兼容，旧模块/覆盖配置时使用）</h4>
+ * <p>
+ * 模块自行创建 HikariCP 连接池，适用于模块配置中声明了独立 storage 节（覆盖本体全局配置）的场景。
+ * <pre>{@code
+ * public JdbcMyRepository(File dataFolder, StorageConfig cfg, Logger logger) {
+ *     super("AXS-MyModule", dataFolder, cfg.toDescriptor(), logger);
+ * }
+ * }</pre>
+ * <ul>
+ *   <li>{@link #initialize()} 创建 HikariCP 连接池并建表（原逻辑）。</li>
+ *   <li>{@link #shutdown()} 关闭连接池（原逻辑）。</li>
+ *   <li>旧用户在模块 config.yml 中配置了 {@code storage.mode: mysql} 等字段时走此路径，旧数据库零改动。</li>
+ * </ul>
+ *
+ * @since 1.0.0
  */
 public abstract class AbstractModuleRepository {
 
     protected final String poolName;
     protected final File dataFolder;
-    protected final StorageDescriptor descriptor;
     protected final Logger logger;
 
+    /** 自建模式下的连接描述符；共享模式下为 null（描述符由 StorageManager 持有）。 */
+    protected final StorageDescriptor descriptor;
+
+    // ── 共享模式字段 ──────────────────────────────────────────
+    private final StorageManager storageManager;
+    private final String moduleId;
+    private final String tablePrefix;
+    private final String moduleSqliteFileName;
+
+    /** 共享模式下从 StorageManager 获取的数据源（MySQL 为全局共享，SQLite 为模块独立）。 */
+    private volatile DataSource sharedDataSource;
+
+    /** 自建模式下的 HikariCP 连接池。 */
     private volatile HikariDataSource dataSource;
 
+    // ─── 构造方法：共享模式 ───────────────────────────────────
+
+    /**
+     * 共享模式构造方法。
+     * <p>
+     * 模块通过 {@link StorageManager} 复用本体连接池，{@link #initialize()} 只建表不建池。
+     *
+     * @param poolName         连接池名（日志/诊断用）
+     * @param storageManager   本体数据源管理器
+     * @param moduleId         模块 ID（SQLite 模式下用于分配独立 {@code .db} 文件）
+     * @param tablePrefix      模块表前缀（多模块共用同一数据库时隔离表）
+     * @param sqliteFileName   模块自定义的 SQLite 文件名（如 {@code "lottery.db"}），
+     *                         为 {@code null} 或空时使用 {@code <moduleId>.db}
+     * @param logger           模块 logger
+     * @since 1.4.0
+     */
+    protected AbstractModuleRepository(String poolName, StorageManager storageManager,
+                                       String moduleId, String tablePrefix,
+                                       String sqliteFileName, Logger logger) {
+        this.poolName = poolName;
+        this.dataFolder = null;
+        this.descriptor = storageManager != null ? storageManager.getDescriptor() : null;
+        this.logger = logger;
+        this.storageManager = storageManager;
+        this.moduleId = moduleId;
+        this.tablePrefix = tablePrefix != null ? tablePrefix : "";
+        this.moduleSqliteFileName = sqliteFileName;
+    }
+
+    // ─── 构造方法：自建模式（向后兼容） ───────────────────────
+
+    /**
+     * 自建模式构造方法。
+     * <p>
+     * 模块自行创建 HikariCP 连接池，{@link #initialize()} 建池并建表，{@link #shutdown()} 关池。
+     *
+     * @param poolName   连接池名
+     * @param dataFolder 模块数据目录（SQLite 文件存放于此）
+     * @param descriptor 数据库连接描述符
+     * @param logger     模块 logger
+     */
     protected AbstractModuleRepository(String poolName, File dataFolder, StorageDescriptor descriptor, Logger logger) {
         this.poolName = poolName;
         this.dataFolder = dataFolder;
         this.descriptor = descriptor;
         this.logger = logger;
+        this.storageManager = null;
+        this.moduleId = null;
+        this.tablePrefix = descriptor != null ? descriptor.tablePrefix() : "";
+        this.moduleSqliteFileName = null;
     }
 
     public final StorageDescriptor getDescriptor() {
         return descriptor;
     }
 
+    /**
+     * 当前是否为共享模式。
+     *
+     * @return {@code true} 表示使用本体 {@link StorageManager} 共享数据源
+     * @since 1.4.0
+     */
+    public final boolean isSharedMode() {
+        return storageManager != null;
+    }
+
+    /**
+     * 返回模块表前缀。
+     *
+     * @return 表前缀，无前缀时返回空字符串
+     * @since 1.4.0
+     */
+    public final String tablePrefix() {
+        return tablePrefix;
+    }
+
     // ─── 生命周期 ─────────────────────────────────────────────
 
     /**
      * 初始化连接池并建表。幂等——重复调用安全。
+     * <p>
+     * 共享模式下只建表（连接池由 {@link StorageManager} 管理）；
+     * 自建模式下创建 HikariCP 连接池并建表。
      */
     public final void initialize() throws SQLException {
+        if (isSharedMode()) {
+            initializeShared();
+        } else {
+            initializeSelfManaged();
+        }
+    }
+
+    private void initializeShared() throws SQLException {
+        if (sharedDataSource != null) {
+            // 幂等：已初始化则只补建表（重复调用安全）
+            try (Connection conn = sharedDataSource.getConnection()) {
+                onInitialize(conn);
+            }
+            return;
+        }
+        if (storageManager == null || !storageManager.isAvailable()) {
+            throw new SQLException(poolName + " 数据源不可用：本体 StorageManager 未初始化");
+        }
+        // MySQL 共享全局数据源；SQLite 按模块名分配独立数据源
+        if (descriptor != null && descriptor.isMysql()) {
+            sharedDataSource = storageManager.getDataSource();
+        } else {
+            String sqliteFile = (moduleSqliteFileName != null && !moduleSqliteFileName.isBlank())
+                ? moduleSqliteFileName
+                : (moduleId != null ? moduleId + ".db" : "axs_module.db");
+            sharedDataSource = storageManager.getModuleDataSource(moduleId, sqliteFile);
+        }
+        try (Connection conn = sharedDataSource.getConnection()) {
+            onInitialize(conn);
+        }
+        logger.info(poolName + " 数据库已初始化（共享模式 " + (isMysql() ? "MySQL" : "SQLite") + "）");
+    }
+
+    private void initializeSelfManaged() throws SQLException {
         if (dataSource != null) {
             return;
         }
-        if (!dataFolder.exists() && !dataFolder.mkdirs()) {
+        if (descriptor == null) {
+            throw new SQLException(poolName + " 数据源不可用：StorageDescriptor 为 null 且未使用共享模式");
+        }
+        if (dataFolder != null && !dataFolder.exists() && !dataFolder.mkdirs()) {
             throw new SQLException("无法创建数据目录: " + dataFolder.getAbsolutePath());
         }
 
@@ -83,7 +225,8 @@ public abstract class AbstractModuleRepository {
             }
             hc.setJdbcUrl("jdbc:sqlite:" + sqliteFile.getAbsolutePath());
             hc.setDriverClassName("org.sqlite.JDBC");
-            hc.setMaximumPoolSize(1);
+            hc.setMaximumPoolSize(2);
+            hc.setConnectionTimeout(10000);
             hc.setConnectionTestQuery("SELECT 1");
         }
 
@@ -102,8 +245,19 @@ public abstract class AbstractModuleRepository {
 
     /**
      * 关闭连接池。
+     * <p>
+     * 共享模式下关闭该模块对应的 SQLite 独立连接池（释放文件锁，供热更新场景使用），
+     * MySQL 全局共享池不受影响；自建模式下关闭 HikariCP 连接池。
      */
     public void shutdown() {
+        if (isSharedMode()) {
+            // 共享模式：关闭模块独立的 SQLite 池（释放文件锁），MySQL 全局池为空操作
+            if (storageManager != null && moduleId != null) {
+                storageManager.closeModuleDataSource(moduleId);
+            }
+            sharedDataSource = null;
+            return;
+        }
         if (dataSource != null && !dataSource.isClosed()) {
             dataSource.close();
             dataSource = null;
@@ -111,14 +265,17 @@ public abstract class AbstractModuleRepository {
     }
 
     public final boolean isAvailable() {
+        if (isSharedMode()) {
+            return sharedDataSource != null;
+        }
         return dataSource != null && !dataSource.isClosed();
     }
 
     /**
-     * 获取底层 HikariCP 数据源，供 DAO 或服务层直接使用。
+     * 获取底层数据源，供 DAO 或服务层直接使用。
      */
-    public final javax.sql.DataSource dataSource() {
-        return dataSource;
+    public final DataSource dataSource() {
+        return isSharedMode() ? sharedDataSource : dataSource;
     }
 
     // ─── 玩家数据删除 ────────────────────────────────────────
@@ -196,6 +353,12 @@ public abstract class AbstractModuleRepository {
      * 获取连接。子类业务方法使用。
      */
     protected final Connection getConnection() throws SQLException {
+        if (isSharedMode()) {
+            if (sharedDataSource == null) {
+                throw new SQLException(poolName + " 数据源不可用（共享模式未初始化，请先调用 initialize()）");
+            }
+            return sharedDataSource.getConnection();
+        }
         if (dataSource == null || dataSource.isClosed()) {
             throw new SQLException(poolName + " 数据源不可用");
         }
@@ -206,14 +369,14 @@ public abstract class AbstractModuleRepository {
      * 判断当前是否为 MySQL 方言。
      */
     protected final boolean isMysql() {
-        return descriptor.isMysql();
+        return descriptor != null && descriptor.isMysql();
     }
 
     /**
      * MySQL 使用 AUTO_INCREMENT，SQLite 使用 AUTOINCREMENT。
      */
     protected final String autoIncrement() {
-        return descriptor.isMysql() ? "AUTO_INCREMENT" : "AUTOINCREMENT";
+        return isMysql() ? "AUTO_INCREMENT" : "AUTOINCREMENT";
     }
 
     /**

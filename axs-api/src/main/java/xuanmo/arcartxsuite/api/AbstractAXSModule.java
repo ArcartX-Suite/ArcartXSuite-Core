@@ -22,6 +22,7 @@ import xuanmo.arcartxsuite.api.config.SyncPolicy;
 import xuanmo.arcartxsuite.api.config.ValidationRule;
 import xuanmo.arcartxsuite.api.bridge.PacketBridgeAPI;
 import xuanmo.arcartxsuite.api.message.MessageProvider;
+import xuanmo.arcartxsuite.api.storage.StorageManager;
 
 /**
  * 可插拔模块的抽象基类，封装通用生命周期管理。
@@ -61,6 +62,7 @@ public abstract class AbstractAXSModule implements AXSModule {
     protected xuanmo.arcartxsuite.api.item.ItemMatcherAPI itemMatcher;
     protected @NotNull xuanmo.arcartxsuite.api.bridge.VanillaItemNameBridge vanillaItemNameBridge;
     protected xuanmo.arcartxsuite.api.currency.CurrencyBridgeAPI currencyManager;
+    protected xuanmo.arcartxsuite.api.currency.RondoBridge rondoBridge;
     protected xuanmo.arcartxsuite.api.attribute.AttributeBridgeRegistry attributeBridge;
     protected @NotNull xuanmo.arcartxsuite.api.script.AriaBridge ariaBridge;
     protected @NotNull xuanmo.arcartxsuite.api.condition.ScriptConditionEvaluator scriptConditionEvaluator;
@@ -72,6 +74,7 @@ public abstract class AbstractAXSModule implements AXSModule {
     protected @NotNull xuanmo.arcartxsuite.api.placeholder.PlaceholderExpansionRegistry expansionRegistry;
     protected @Nullable xuanmo.arcartxsuite.api.bridge.PropBridgeAPI propBridge;
     protected File pluginDataFolder;
+    protected @NotNull StorageManager storageManager;
 
 
     private boolean ready;
@@ -292,6 +295,21 @@ public abstract class AbstractAXSModule implements AXSModule {
     protected abstract void startService() throws Exception;
 
     /**
+     * 声明本模块通过 EventBus 发布的事件主题列表。
+     * <p>
+     * 基类在 {@code onEnable} 阶段（{@code startService} 之前）自动将这些主题注册到 EventBus，
+     * 以便其他模块在启动时通过 {@code EventBusCapability.hasPublisher(topic)} 检测本模块是否已加载。
+     * <p>
+     * 默认返回空列表。发布 EventBus 事件的模块应重写此方法返回其主题列表。
+     *
+     * @return 本模块发布的事件主题列表
+     */
+    @SuppressWarnings("unused")
+    protected List<String> publishedTopics() {
+        return List.of();
+    }
+
+    /**
      * 关闭模块服务并释放资源。
      * 在监听器、命令、占位符等自动注销之前调用。
      */
@@ -315,6 +333,7 @@ public abstract class AbstractAXSModule implements AXSModule {
         this.itemMatcher = context.itemMatcher();
         this.vanillaItemNameBridge = context.vanillaItemNameBridge();
         this.currencyManager = context.currencyManager();
+        this.rondoBridge = context.rondoBridge();
         this.attributeBridge = context.attributeBridge();
         this.ariaBridge = context.ariaBridge();
         this.scriptConditionEvaluator = context.scriptConditionEvaluator();
@@ -325,6 +344,7 @@ public abstract class AbstractAXSModule implements AXSModule {
         this.placeholderResolver = context.placeholderResolver();
         this.expansionRegistry = context.expansionRegistry();
         this.propBridge = context.propBridge();
+        this.storageManager = context.storageManager();
 
         Logger logger = context.logger();
 
@@ -343,6 +363,18 @@ public abstract class AbstractAXSModule implements AXSModule {
             //    即使服务启动失败，命令仍可注册并对玩家显示友好提示）
             commandBindings().forEach((name, executor) ->
                 context.registerCommand(name, executor));
+
+            // 3b. 注册 EventBus 发布者主题（在 startService 之前，确保其他模块可查询）
+            List<String> topics = publishedTopics();
+            if (topics != null && !topics.isEmpty()) {
+                xuanmo.arcartxsuite.api.capability.EventBusCapability eventBus =
+                    context.getCapability(xuanmo.arcartxsuite.api.capability.EventBusCapability.class);
+                if (eventBus != null) {
+                    for (String topic : topics) {
+                        eventBus.registerPublisher(topic);
+                    }
+                }
+            }
 
             // 4. 启动服务
             startService();
@@ -471,16 +503,6 @@ public abstract class AbstractAXSModule implements AXSModule {
 
 
     // ── 注入的 API 委托方法（子类直接调用，无需通过 context） ──────
-
-    /** 按类型查找已加载的模块实例 */
-    protected <T extends AXSModule> java.util.Optional<T> getModule(Class<T> moduleClass) {
-        return context.getModule(moduleClass);
-    }
-
-    /** 按 id 查找已加载的模块实例 */
-    protected java.util.Optional<AXSModule> getModule(String moduleId) {
-        return context.getModule(moduleId);
-    }
 
     /** 注册当前模块提供的能力接口 */
     protected <T> void registerCapability(Class<T> capabilityType, T implementation) {

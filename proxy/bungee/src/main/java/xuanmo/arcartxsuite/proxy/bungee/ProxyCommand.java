@@ -11,6 +11,10 @@ import net.md_5.bungee.api.plugin.TabExecutor;
 import xuanmo.arcartxsuite.proxy.common.config.ProxyConfig;
 import xuanmo.arcartxsuite.proxy.common.model.YggdrasilSource;
 
+/**
+ * BungeeCord 代理端管理命令（/axsproxy），提供重载配置、查看状态、
+ * 管理 Yggdrasil 源等子命令，权限节点 {@code arcartxsuite.proxy.admin}。
+ */
 public class ProxyCommand extends Command implements TabExecutor {
 
     private final ArcartXSuiteBungee plugin;

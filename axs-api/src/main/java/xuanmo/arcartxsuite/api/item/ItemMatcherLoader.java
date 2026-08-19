@@ -2,6 +2,8 @@ package xuanmo.arcartxsuite.api.item;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -40,6 +42,7 @@ public final class ItemMatcherLoader {
             normalizeDisplayList(section.getStringList("name-contains")),
             normalizeDisplayList(section.getStringList("lore-contains")),
             normalizeStringList(section.getStringList("nbt-keys")),
+            loadNbtValues(section.getConfigurationSection("nbt-values")),
             compilePatterns(section.getStringList("name-regex"), logger, path + ".name-regex"),
             compilePatterns(section.getStringList("lore-regex"), logger, path + ".lore-regex")
         );
@@ -73,6 +76,22 @@ public final class ItemMatcherLoader {
      * @param path   配置路径（用于日志定位）
      * @return 不可变 Pattern 列表
      */
+    private static Map<String, String> loadNbtValues(ConfigurationSection section) {
+        if (section == null) return Map.of();
+        Map<String, String> values = new LinkedHashMap<>();
+        for (String rawKey : section.getKeys(false)) {
+            String key = normalizeId(rawKey);
+            if (key.isBlank()) continue;
+            Object rawValue = section.get(rawKey);
+            values.put(key, normalizeNbtValue(rawValue == null ? "" : String.valueOf(rawValue)));
+        }
+        return Map.copyOf(values);
+    }
+
+    public static String normalizeNbtValue(String rawValue) {
+        return rawValue == null ? "" : rawValue.trim().toLowerCase(Locale.ROOT);
+    }
+
     public static List<Pattern> compilePatterns(List<String> values, Logger logger, String path) {
         List<Pattern> patterns = new ArrayList<>();
         if (values == null) {

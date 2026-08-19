@@ -1,6 +1,7 @@
 package xuanmo.arcartxsuite.api.item;
 
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -28,13 +29,14 @@ public record ItemMatcher(
     List<String> nameContains,
     List<String> loreContains,
     List<String> nbtKeys,
+    Map<String, String> nbtValues,
     List<Pattern> namePatterns,
     List<Pattern> lorePatterns
 ) {
 
     /** 返回一个所有维度均为空的匹配器（匹配任何物品时配合 emptyMatcher 使用）。 */
     public static ItemMatcher empty() {
-        return new ItemMatcher(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+        return new ItemMatcher(List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), Map.<String, String>of(), List.of(), List.of());
     }
 
     /**
@@ -51,6 +53,7 @@ public record ItemMatcher(
             && nameContains.isEmpty()
             && loreContains.isEmpty()
             && nbtKeys.isEmpty()
+            && nbtValues.isEmpty()
             && namePatterns.isEmpty()
             && lorePatterns.isEmpty();
     }

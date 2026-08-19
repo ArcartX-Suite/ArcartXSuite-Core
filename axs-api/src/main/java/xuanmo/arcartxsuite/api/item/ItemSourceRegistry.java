@@ -1,5 +1,6 @@
 package xuanmo.arcartxsuite.api.item;
 
+import java.util.List;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.Nullable;
@@ -44,6 +45,28 @@ public interface ItemSourceRegistry {
 
     /** 通过 MMOItems 类型+ID 生成物品 */
     @Nullable ItemStack generateMmoItem(String typeId, String itemId, int amount);
+
+    // ─── Overture 扩展查询 ────────────────────────────────────────
+
+    /** 获取 Overture 物品模板显示名，Overture 不可用或 ID 不存在时返回 null */
+    @Nullable String overtureItemDisplayName(String itemId);
+
+    /** 获取 Overture 物品模板描述行，Overture 不可用或 ID 不存在时返回 null */
+    @Nullable List<String> overtureItemDisplayLore(String itemId);
+
+    /** 获取 Overture 物品模板副本（仅展示用，不含实例数据），Overture 不可用或 ID 不存在时返回 null */
+    @Nullable ItemStack overtureTemplateItem(String itemId);
+
+    /** 获取所有已注册的 Overture 物品 ID，Overture 不可用时返回空列表 */
+    List<String> overtureItemIds();
+
+    // ─── Overture 序列化 ──────────────────────────────────────────
+
+    /** 使用 Overture 原生序列化将 ItemStack 序列化为 JSON 字符串，Overture 不可用时返回 null */
+    @Nullable String overtureSerialize(ItemStack item);
+
+    /** 使用 Overture 原生反序列化从 JSON 字符串恢复 ItemStack，Overture 不可用或数据无效时返回 null */
+    @Nullable ItemStack overtureDeserialize(String json);
 
     // ─── 可用性查询 ───────────────────────────────────────────────
 
