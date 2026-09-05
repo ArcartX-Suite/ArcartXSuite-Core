@@ -1,7 +1,5 @@
 package xuanmo.arcartxsuite.api.storage;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -15,42 +13,22 @@ import javax.sql.DataSource;
 /**
  * 模块存储层统一基类。
  * <p>
- * 封装 HikariCP 连接池初始化（MySQL / SQLite 双方言）、生命周期管理、
- * 以及玩家数据删除模板。子类只需关注建表逻辑和业务 SQL。
+ * 自 1.5.0 起重构为单一模式：只依赖一个由 {@link StorageManager#resolveModuleDataSource}
+ * 解析出的 {@link DataSource}（永不为 {@code null}），连接池生命周期完全由
+ * {@link StorageManager} 统一管控。子类只需关注建表逻辑和业务 SQL。
  *
- * <h3>两种模式</h3>
- * <p>
- * 自 1.4.0 起支持双模式，由构造方法决定：
- *
- * <h4>1. 共享模式（推荐，新模块优先使用）</h4>
- * <p>
- * 模块通过 {@link StorageManager} 复用本体统一管理的连接池，无需自行创建/关闭 HikariCP。
- * 连接池生命周期由本体统一管控，彻底消除遗漏 {@code initialize()}/{@code shutdown()} 的问题。
+ * <h3>使用方式</h3>
  * <pre>{@code
- * public JdbcMyRepository(StorageManager sm, String tablePrefix, Logger logger) {
- *     super("AXS-MyModule", sm, "mymodule", tablePrefix, logger);
- * }
+ * // 在 Module.startService 中：
+ * DataSource ds = storageManager.resolveModuleDataSource("mymodule",
+ *     config.storage().sqliteFileName(), dataFolder,
+ *     config.storage().hasOverride() ? config.storage().toDescriptor() : null);
+ * StorageDescriptor desc = config.storage().hasOverride()
+ *     ? config.storage().toDescriptor()
+ *     : storageManager.getDescriptor().withTablePrefix(config.storage().tablePrefix());
+ * repo = new JdbcMyRepository("AXS-MyModule", ds, desc, dataFolder, logger);
+ * repo.initialize();  // 只建表，不建池（池由 StorageManager 管理）
  * }</pre>
- * <ul>
- *   <li>MySQL 模式：所有模块共享本体一个 HikariCP 连接池，各模块用 {@code tablePrefix} 隔离表。</li>
- *   <li>SQLite 模式：各模块仍使用各自的 {@code <moduleId>.db} 文件，本体按模块名分配独立连接。</li>
- *   <li>{@link #initialize()} 只建表，不建池（池由 {@link StorageManager} 管理）。</li>
- *   <li>{@link #shutdown()} 关闭该模块对应的 SQLite 独立池（释放文件锁），MySQL 全局池不受影响。</li>
- * </ul>
- *
- * <h4>2. 自建模式（向后兼容，旧模块/覆盖配置时使用）</h4>
- * <p>
- * 模块自行创建 HikariCP 连接池，适用于模块配置中声明了独立 storage 节（覆盖本体全局配置）的场景。
- * <pre>{@code
- * public JdbcMyRepository(File dataFolder, StorageConfig cfg, Logger logger) {
- *     super("AXS-MyModule", dataFolder, cfg.toDescriptor(), logger);
- * }
- * }</pre>
- * <ul>
- *   <li>{@link #initialize()} 创建 HikariCP 连接池并建表（原逻辑）。</li>
- *   <li>{@link #shutdown()} 关闭连接池（原逻辑）。</li>
- *   <li>旧用户在模块 config.yml 中配置了 {@code storage.mode: mysql} 等字段时走此路径，旧数据库零改动。</li>
- * </ul>
  *
  * @since 1.0.0
  */
@@ -60,71 +38,34 @@ public abstract class AbstractModuleRepository {
     protected final File dataFolder;
     protected final Logger logger;
 
-    /** 自建模式下的连接描述符；共享模式下为 null（描述符由 StorageManager 持有）。 */
+    /** 存储描述符，提供方言信息（{@code isMysql()}）和表前缀。 */
     protected final StorageDescriptor descriptor;
 
-    // ── 共享模式字段 ──────────────────────────────────────────
-    private final StorageManager storageManager;
-    private final String moduleId;
+    /** 底层数据源（由 StorageManager 解析，永不为 null）。 */
+    private final DataSource dataSource;
+
+    /** 模块表前缀。 */
     private final String tablePrefix;
-    private final String moduleSqliteFileName;
-
-    /** 共享模式下从 StorageManager 获取的数据源（MySQL 为全局共享，SQLite 为模块独立）。 */
-    private volatile DataSource sharedDataSource;
-
-    /** 自建模式下的 HikariCP 连接池。 */
-    private volatile HikariDataSource dataSource;
-
-    // ─── 构造方法：共享模式 ───────────────────────────────────
 
     /**
-     * 共享模式构造方法。
-     * <p>
-     * 模块通过 {@link StorageManager} 复用本体连接池，{@link #initialize()} 只建表不建池。
+     * 构造模块存储基类。
      *
-     * @param poolName         连接池名（日志/诊断用）
-     * @param storageManager   本体数据源管理器
-     * @param moduleId         模块 ID（SQLite 模式下用于分配独立 {@code .db} 文件）
-     * @param tablePrefix      模块表前缀（多模块共用同一数据库时隔离表）
-     * @param sqliteFileName   模块自定义的 SQLite 文件名（如 {@code "lottery.db"}），
-     *                         为 {@code null} 或空时使用 {@code <moduleId>.db}
-     * @param logger           模块 logger
-     * @since 1.4.0
-     */
-    protected AbstractModuleRepository(String poolName, StorageManager storageManager,
-                                       String moduleId, String tablePrefix,
-                                       String sqliteFileName, Logger logger) {
-        this.poolName = poolName;
-        this.dataFolder = null;
-        this.descriptor = storageManager != null ? storageManager.getDescriptor() : null;
-        this.logger = logger;
-        this.storageManager = storageManager;
-        this.moduleId = moduleId;
-        this.tablePrefix = tablePrefix != null ? tablePrefix : "";
-        this.moduleSqliteFileName = sqliteFileName;
-    }
-
-    // ─── 构造方法：自建模式（向后兼容） ───────────────────────
-
-    /**
-     * 自建模式构造方法。
-     * <p>
-     * 模块自行创建 HikariCP 连接池，{@link #initialize()} 建池并建表，{@link #shutdown()} 关池。
-     *
-     * @param poolName   连接池名
-     * @param dataFolder 模块数据目录（SQLite 文件存放于此）
-     * @param descriptor 数据库连接描述符
+     * @param poolName   连接池名（日志/诊断用）
+     * @param dataSource 数据源（由 {@link StorageManager#resolveModuleDataSource} 解析，永不为 null）
+     * @param descriptor 存储描述符（提供方言信息和表前缀）
+     * @param dataFolder 模块数据目录（迁移 SQLite 目标文件时使用）
      * @param logger     模块 logger
+     * @since 1.5.0
      */
-    protected AbstractModuleRepository(String poolName, File dataFolder, StorageDescriptor descriptor, Logger logger) {
+    protected AbstractModuleRepository(String poolName, DataSource dataSource,
+                                       StorageDescriptor descriptor, File dataFolder,
+                                       Logger logger) {
         this.poolName = poolName;
-        this.dataFolder = dataFolder;
+        this.dataSource = dataSource;
         this.descriptor = descriptor;
+        this.dataFolder = dataFolder;
         this.logger = logger;
-        this.storageManager = null;
-        this.moduleId = null;
         this.tablePrefix = descriptor != null ? descriptor.tablePrefix() : "";
-        this.moduleSqliteFileName = null;
     }
 
     public final StorageDescriptor getDescriptor() {
@@ -132,20 +73,9 @@ public abstract class AbstractModuleRepository {
     }
 
     /**
-     * 当前是否为共享模式。
-     *
-     * @return {@code true} 表示使用本体 {@link StorageManager} 共享数据源
-     * @since 1.4.0
-     */
-    public final boolean isSharedMode() {
-        return storageManager != null;
-    }
-
-    /**
      * 返回模块表前缀。
      *
      * @return 表前缀，无前缀时返回空字符串
-     * @since 1.4.0
      */
     public final String tablePrefix() {
         return tablePrefix;
@@ -154,139 +84,55 @@ public abstract class AbstractModuleRepository {
     // ─── 生命周期 ─────────────────────────────────────────────
 
     /**
-     * 初始化连接池并建表。幂等——重复调用安全。
+     * 建表。幂等——重复调用安全（依赖 {@code CREATE TABLE IF NOT EXISTS}）。
      * <p>
-     * 共享模式下只建表（连接池由 {@link StorageManager} 管理）；
-     * 自建模式下创建 HikariCP 连接池并建表。
+     * 连接池由 {@link StorageManager} 管理，本方法只通过传入连接执行建表逻辑。
      */
     public final void initialize() throws SQLException {
-        if (isSharedMode()) {
-            initializeShared();
-        } else {
-            initializeSelfManaged();
-        }
-    }
-
-    private void initializeShared() throws SQLException {
-        if (sharedDataSource != null) {
-            // 幂等：已初始化则只补建表（重复调用安全）
-            try (Connection conn = sharedDataSource.getConnection()) {
-                onInitialize(conn);
-            }
-            return;
-        }
-        if (storageManager == null || !storageManager.isAvailable()) {
-            throw new SQLException(poolName + " 数据源不可用：本体 StorageManager 未初始化");
-        }
-        // MySQL 共享全局数据源；SQLite 按模块名分配独立数据源
-        if (descriptor != null && descriptor.isMysql()) {
-            sharedDataSource = storageManager.getDataSource();
-        } else {
-            String sqliteFile = (moduleSqliteFileName != null && !moduleSqliteFileName.isBlank())
-                ? moduleSqliteFileName
-                : (moduleId != null ? moduleId + ".db" : "axs_module.db");
-            sharedDataSource = storageManager.getModuleDataSource(moduleId, sqliteFile);
-        }
-        try (Connection conn = sharedDataSource.getConnection()) {
-            onInitialize(conn);
-        }
-        logger.info(poolName + " 数据库已初始化（共享模式 " + (isMysql() ? "MySQL" : "SQLite") + "）");
-    }
-
-    private void initializeSelfManaged() throws SQLException {
-        if (dataSource != null) {
-            return;
-        }
-        if (descriptor == null) {
-            throw new SQLException(poolName + " 数据源不可用：StorageDescriptor 为 null 且未使用共享模式");
-        }
-        if (dataFolder != null && !dataFolder.exists() && !dataFolder.mkdirs()) {
-            throw new SQLException("无法创建数据目录: " + dataFolder.getAbsolutePath());
-        }
-
-        HikariConfig hc = new HikariConfig();
-        hc.setPoolName(poolName);
-        hc.setMinimumIdle(1);
-        hc.setAutoCommit(true);
-
-        if (descriptor.isMysql()) {
-            hc.setMaximumPoolSize(descriptor.poolSize());
-            String jdbcUrl = "jdbc:mysql://" + descriptor.host() + ":" + descriptor.port()
-                + "/" + descriptor.database()
-                + "?useSSL=true&characterEncoding=UTF-8&serverTimezone=UTC";
-            hc.setJdbcUrl(jdbcUrl);
-            hc.setDriverClassName("com.mysql.cj.jdbc.Driver");
-            hc.setUsername(descriptor.username());
-            hc.setPassword(descriptor.password());
-        } else {
-            File sqliteFile = new File(dataFolder, descriptor.sqliteFileName());
-            if (!sqliteFile.getParentFile().exists()) {
-                sqliteFile.getParentFile().mkdirs();
-            }
-            hc.setJdbcUrl("jdbc:sqlite:" + sqliteFile.getAbsolutePath());
-            hc.setDriverClassName("org.sqlite.JDBC");
-            hc.setMaximumPoolSize(2);
-            hc.setConnectionTimeout(10000);
-            hc.setConnectionTestQuery("SELECT 1");
-        }
-
-        dataSource = new HikariDataSource(hc);
-
-        if (!descriptor.isMysql()) {
-            configureSqlite();
-        }
-
         try (Connection conn = dataSource.getConnection()) {
             onInitialize(conn);
         }
-
-        logger.info(poolName + " 数据库已初始化 (" + (descriptor.isMysql() ? "MySQL" : "SQLite") + ")");
+        logger.info(poolName + " 数据库已初始化 (" + (isMysql() ? "MySQL" : "SQLite") + ")");
     }
 
     /**
-     * 关闭连接池。
+     * 空操作——连接池由 {@link StorageManager} 统一管理。
      * <p>
-     * 共享模式下关闭该模块对应的 SQLite 独立连接池（释放文件锁，供热更新场景使用），
-     * MySQL 全局共享池不受影响；自建模式下关闭 HikariCP 连接池。
+     * 模块应在 {@code stopService()} 中调用
+     * {@code storageManager.closeModuleDataSource(moduleId)} 释放 SQLite 文件锁。
+     * 保留本方法仅为向后兼容，调用它不会产生任何副作用。
      */
     public void shutdown() {
-        if (isSharedMode()) {
-            // 共享模式：关闭模块独立的 SQLite 池（释放文件锁），MySQL 全局池为空操作
-            if (storageManager != null && moduleId != null) {
-                storageManager.closeModuleDataSource(moduleId);
-            }
-            sharedDataSource = null;
-            return;
-        }
-        if (dataSource != null && !dataSource.isClosed()) {
-            dataSource.close();
-            dataSource = null;
-        }
+        // no-op：连接池生命周期由 StorageManager 统一管控
     }
 
     public final boolean isAvailable() {
-        if (isSharedMode()) {
-            return sharedDataSource != null;
-        }
-        return dataSource != null && !dataSource.isClosed();
+        return dataSource != null;
     }
 
     /**
      * 获取底层数据源，供 DAO 或服务层直接使用。
      */
     public final DataSource dataSource() {
-        return isSharedMode() ? sharedDataSource : dataSource;
+        return dataSource;
     }
 
     // ─── 玩家数据删除 ────────────────────────────────────────
 
     /**
      * 删除指定玩家在该模块的全部数据。
+     * <p>
+     * 所有表的删除操作在同一个事务中执行，确保删到一半失败时不会留下半残数据。
      *
      * @param playerUuid 玩家 UUID
      * @return 总受影响行数
      */
     public final int deletePlayerData(UUID playerUuid) throws SQLException {
+        // 优先使用子类自定义的多列删除逻辑（适用于不同表用不同 UUID 列名的模块）
+        int custom = onPurgePlayerData(playerUuid);
+        if (custom >= 0) {
+            return custom;
+        }
         List<String> tables = playerDataTables();
         if (tables == null || tables.isEmpty()) {
             return 0;
@@ -294,12 +140,22 @@ public abstract class AbstractModuleRepository {
         String column = playerUuidColumn();
         int total = 0;
         try (Connection conn = getConnection()) {
-            for (String table : tables) {
-                String sql = "DELETE FROM " + table + " WHERE " + column + " = ?";
-                try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                    ps.setString(1, playerUuid.toString());
-                    total += ps.executeUpdate();
+            boolean originalAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                for (String table : tables) {
+                    String sql = "DELETE FROM " + table + " WHERE " + column + " = ?";
+                    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                        ps.setString(1, playerUuid.toString());
+                        total += ps.executeUpdate();
+                    }
                 }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(originalAutoCommit);
             }
         }
         return total;
@@ -307,6 +163,8 @@ public abstract class AbstractModuleRepository {
 
     /**
      * 清空该模块所有玩家数据表。
+     * <p>
+     * 所有表的清空操作在同一个事务中执行，确保中途失败时不会留下半残数据。
      *
      * @return 总受影响行数
      */
@@ -317,10 +175,20 @@ public abstract class AbstractModuleRepository {
         }
         int total = 0;
         try (Connection conn = getConnection()) {
-            for (String table : tables) {
-                try (java.sql.Statement stmt = conn.createStatement()) {
-                    total += stmt.executeUpdate("DELETE FROM " + table);
+            boolean originalAutoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            try {
+                for (String table : tables) {
+                    try (java.sql.Statement stmt = conn.createStatement()) {
+                        total += stmt.executeUpdate("DELETE FROM " + table);
+                    }
                 }
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(originalAutoCommit);
             }
         }
         return total;
@@ -347,19 +215,26 @@ public abstract class AbstractModuleRepository {
         return "player_uuid";
     }
 
+    /**
+     * 自定义玩家数据删除逻辑（适用于不同表使用不同 UUID 列名的模块）。
+     * <p>
+     * 默认返回 {@code -1}，表示走 {@link #playerDataTables()} + {@link #playerUuidColumn()} 统一删除路径。
+     * 子类可覆写此方法，返回 {@code >= 0} 的受影响行数，跳过默认路径。
+     *
+     * @param playerUuid 玩家 UUID
+     * @return 受影响行数（{@code >= 0}），或 {@code -1} 表示使用默认路径
+     */
+    protected int onPurgePlayerData(UUID playerUuid) throws SQLException {
+        return -1;
+    }
+
     // ─── 工具方法 ─────────────────────────────────────────────
 
     /**
      * 获取连接。子类业务方法使用。
      */
     protected final Connection getConnection() throws SQLException {
-        if (isSharedMode()) {
-            if (sharedDataSource == null) {
-                throw new SQLException(poolName + " 数据源不可用（共享模式未初始化，请先调用 initialize()）");
-            }
-            return sharedDataSource.getConnection();
-        }
-        if (dataSource == null || dataSource.isClosed()) {
+        if (dataSource == null) {
             throw new SQLException(poolName + " 数据源不可用");
         }
         return dataSource.getConnection();
@@ -413,12 +288,6 @@ public abstract class AbstractModuleRepository {
         }
     }
 
-    private void configureSqlite() {
-        tryExecute("PRAGMA journal_mode=WAL");
-        tryExecute("PRAGMA synchronous=NORMAL");
-        tryExecute("PRAGMA busy_timeout=5000");
-    }
-
     /**
      * 该 Repository 负责的所有数据表名列表，包括业务表和玩家表。
      * 用于跨数据源一键迁移，默认返回 {@link #playerDataTables()}。
@@ -430,7 +299,8 @@ public abstract class AbstractModuleRepository {
     /**
      * 跨源一键将当前数据源中的数据，完全克隆/迁移到目标数据源对应的连接池上。
      * <p>
-     * 本方法支持 SQLite ↔ MySQL 双向互迁，自动创建目标表结构并支持事务分批透传。
+     * 本方法委托给 {@link MigrationService} 执行，支持 SQLite ↔ MySQL 双向互迁，
+     * 自动创建目标表结构并支持事务分批透传。
      *
      * @param targetDescriptor 目标数据库描述符
      * @param overwriteTarget  是否覆盖目标表原有数据
@@ -444,128 +314,21 @@ public abstract class AbstractModuleRepository {
         if (tables == null || tables.isEmpty()) {
             return new MigrationResult(true, 0, 0);
         }
-
-        HikariDataSource targetDS = null;
-        try {
-            // 1. 初始化临时目标数据源
-            HikariConfig hc = new HikariConfig();
-            hc.setPoolName(poolName + "-TargetTemp");
-            hc.setMinimumIdle(1);
-            hc.setAutoCommit(false); // 批量提交关闭 autoCommit 提高事务速度
-
-            if (targetDescriptor.isMysql()) {
-                hc.setMaximumPoolSize(2);
-                String jdbcUrl = "jdbc:mysql://" + targetDescriptor.host() + ":" + targetDescriptor.port()
-                    + "/" + targetDescriptor.database()
-                    + "?useSSL=true&characterEncoding=UTF-8&serverTimezone=UTC";
-                hc.setJdbcUrl(jdbcUrl);
-                hc.setDriverClassName("com.mysql.cj.jdbc.Driver");
-                hc.setUsername(targetDescriptor.username());
-                hc.setPassword(targetDescriptor.password());
-            } else {
-                File sqliteFile = new File(dataFolder, targetDescriptor.sqliteFileName());
-                if (!sqliteFile.getParentFile().exists()) {
-                    sqliteFile.getParentFile().mkdirs();
-                }
-                hc.setJdbcUrl("jdbc:sqlite:" + sqliteFile.getAbsolutePath());
-                hc.setDriverClassName("org.sqlite.JDBC");
-                hc.setMaximumPoolSize(1);
-                hc.setConnectionTestQuery("SELECT 1");
-            }
-            targetDS = new HikariDataSource(hc);
-
-            // 2. 触发建表与初始化逻辑
-            try (Connection conn = targetDS.getConnection()) {
-                onInitialize(conn);
-                conn.commit();
-            }
-
-            int migratedCount = 0;
-            long totalRows = 0;
-            MigrationResult result = new MigrationResult(true, 0, 0);
-
-            // 3. 逐表数据同步
-            for (String table : tables) {
+        return MigrationService.migrate(
+            dataSource(),
+            targetDescriptor,
+            dataFolder,
+            poolName,
+            conn -> {
                 try {
-                    long tableRows = migrateSingleTable(table, overwriteTarget, targetDS);
-                    result.addTableRow(table, tableRows);
-                    totalRows += tableRows;
-                    migratedCount++;
-                } catch (Exception e) {
-                    result.addError("迁移表 " + table + " 失败: " + e.getMessage());
+                    onInitialize(conn);
+                } catch (SQLException e) {
+                    throw new RuntimeException("目标建表失败: " + e.getMessage(), e);
                 }
-            }
-
-            final int finalMigratedCount = migratedCount;
-            final long finalTotalRows = totalRows;
-            MigrationResult report = new MigrationResult(result.errors().isEmpty(), finalMigratedCount, finalTotalRows);
-            report.tableRows().putAll(result.tableRows());
-            report.errors().addAll(result.errors());
-            return report;
-
-        } catch (Exception e) {
-            MigrationResult res = new MigrationResult(false, 0, 0);
-            res.addError("初始化目标迁移连接池失败: " + e.getMessage());
-            return res;
-        } finally {
-            if (targetDS != null && !targetDS.isClosed()) {
-                targetDS.close();
-            }
-        }
-    }
-
-    private long migrateSingleTable(String table, boolean overwrite, HikariDataSource targetDS) throws SQLException {
-        long count = 0;
-        try (Connection srcConn = getConnection();
-             Connection destConn = targetDS.getConnection();
-             PreparedStatement srcPs = srcConn.prepareStatement("SELECT * FROM " + table);
-             ResultSet rs = srcPs.executeQuery()) {
-
-            destConn.setAutoCommit(false);
-
-            // 如果覆盖，先清空目标表
-            if (overwrite) {
-                try (java.sql.Statement stmt = destConn.createStatement()) {
-                    stmt.executeUpdate("DELETE FROM " + table);
-                }
-            }
-
-            java.sql.ResultSetMetaData meta = rs.getMetaData();
-            int columnCount = meta.getColumnCount();
-
-            // 构造 INSERT SQL
-            StringBuilder insertSql = new StringBuilder("INSERT INTO " + table + " (");
-            StringBuilder placeholders = new StringBuilder();
-            for (int i = 1; i <= columnCount; i++) {
-                if (i > 1) {
-                    insertSql.append(", ");
-                    placeholders.append(", ");
-                }
-                insertSql.append(meta.getColumnName(i));
-                placeholders.append("?");
-            }
-            insertSql.append(") VALUES (").append(placeholders).append(")");
-
-            try (PreparedStatement destPs = destConn.prepareStatement(insertSql.toString())) {
-                while (rs.next()) {
-                    for (int i = 1; i <= columnCount; i++) {
-                        destPs.setObject(i, rs.getObject(i));
-                    }
-                    destPs.addBatch();
-                    count++;
-
-                    if (count % 500 == 0) {
-                        destPs.executeBatch();
-                        destConn.commit();
-                    }
-                }
-                destPs.executeBatch();
-                destConn.commit();
-            } catch (SQLException e) {
-                destConn.rollback();
-                throw e;
-            }
-        }
-        return count;
+                return null;
+            },
+            tables,
+            overwriteTarget
+        );
     }
 }

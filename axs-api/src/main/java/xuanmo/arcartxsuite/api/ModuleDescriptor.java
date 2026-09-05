@@ -9,70 +9,39 @@ import java.util.Objects;
  * <p>
  * 通常从模块 Jar 内的 {@code module.yml} 解析得到，
  * 也可由模块主类直接构造返回。
+ *
+ * @since 1.0.0
  */
-public final class ModuleDescriptor {
+public record ModuleDescriptor(
+    String id,
+    String name,
+    String version,
+    String mainClass,
+    List<String> depends,
+    List<String> softDepends,
+    List<String> externalDepends,
+    List<String> externalSoftDepends,
+    String signature
+) {
 
-    private final String id;
-    private final String name;
-    private final String version;
-    private final String mainClass;
-    private final List<String> depends;
-    private final List<String> softDepends;
-    private final List<String> externalDepends;
-    private final List<String> externalSoftDepends;
-    private final String signature;
-
-    private ModuleDescriptor(Builder builder) {
-        this.id = Objects.requireNonNull(builder.id, "id");
-        this.name = builder.name != null ? builder.name : builder.id;
-        this.version = builder.version != null ? builder.version : "1.0.0";
-        this.mainClass = builder.mainClass != null ? builder.mainClass : "";
-        this.depends = List.copyOf(builder.depends);
-        this.softDepends = List.copyOf(builder.softDepends);
-        this.externalDepends = List.copyOf(builder.externalDepends);
-        this.externalSoftDepends = List.copyOf(builder.externalSoftDepends);
-        this.signature = builder.signature;
-    }
-
-    public String id() {
-        return id;
-    }
-
-    public String name() {
-        return name;
-    }
-
-    public String version() {
-        return version;
-    }
-
-    public String mainClass() {
-        return mainClass;
-    }
-
-    /** 必须已加载的其他 AXS 模块 id 列表 */
-    public List<String> depends() {
-        return depends;
-    }
-
-    /** 可选增强的其他 AXS 模块 id 列表 */
-    public List<String> softDepends() {
-        return softDepends;
-    }
-
-    /** 必须已安装的外部 Bukkit 插件名 */
-    public List<String> externalDepends() {
-        return externalDepends;
-    }
-
-    /** 可选的外部 Bukkit 插件名 */
-    public List<String> externalSoftDepends() {
-        return externalSoftDepends;
-    }
-
-    /** Ed25519 Base64 数字签名（可为 null） */
-    public String signature() {
-        return signature;
+    /**
+     * 紧凑构造方法：校验必填字段并应用默认值。
+     */
+    public ModuleDescriptor {
+        Objects.requireNonNull(id, "id");
+        if (name == null || name.isBlank()) {
+            name = id;
+        }
+        if (version == null || version.isBlank()) {
+            version = "1.0.0";
+        }
+        if (mainClass == null) {
+            mainClass = "";
+        }
+        depends = depends != null ? List.copyOf(depends) : List.of();
+        softDepends = softDepends != null ? List.copyOf(softDepends) : List.of();
+        externalDepends = externalDepends != null ? List.copyOf(externalDepends) : List.of();
+        externalSoftDepends = externalSoftDepends != null ? List.copyOf(externalSoftDepends) : List.of();
     }
 
     public static Builder builder(String id) {
@@ -91,7 +60,7 @@ public final class ModuleDescriptor {
         private String signature;
 
         private Builder(String id) {
-            this.id = id;
+            this.id = Objects.requireNonNull(id, "id");
         }
 
         public Builder name(String name) {
@@ -135,7 +104,11 @@ public final class ModuleDescriptor {
         }
 
         public ModuleDescriptor build() {
-            return new ModuleDescriptor(this);
+            return new ModuleDescriptor(
+                id, name, version, mainClass,
+                depends, softDepends, externalDepends, externalSoftDepends,
+                signature
+            );
         }
     }
 }

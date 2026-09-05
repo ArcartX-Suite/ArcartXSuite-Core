@@ -11,10 +11,11 @@ import java.util.Set;
  * 不做剪枝）、"不透明区段"（整体跳过深层合并）、"已废弃路径"（强制删除）。
  *
  * <h3>路径表达式</h3>
- * 使用点号 {@code .} 分层，{@code *} 作为单层通配。例如：
+ * 使用点号 {@code .} 分层，{@code *} 作为单层通配，{@code **} 作为递归通配（匹配 0 个或多个层）。例如：
  * <ul>
  *     <li>{@code "tabs"} 精确匹配根下的 tabs 节</li>
  *     <li>{@code "rules.*.actions"} 匹配 rules 下任意子节的 actions</li>
+ *     <li>{@code "rules.**.actions"} 匹配 rules 下任意深度子节的 actions</li>
  * </ul>
  *
  * <h3>语义</h3>
@@ -79,15 +80,37 @@ public final class SyncPolicy {
         }
         String[] patternParts = split(normalizedPattern);
         String[] pathParts = split(normalizedPath);
-        if (patternParts.length != pathParts.length) {
-            return false;
+        return matchesSegments(patternParts, 0, pathParts, 0);
+    }
+
+    /**
+     * 递归匹配路径段。支持 {@code *} 单层通配和 {@code **} 递归通配（匹配 0 个或多个段）。
+     */
+    private static boolean matchesSegments(String[] patternParts, int pi, String[] pathParts, int ti) {
+        // 模式耗尽：路径也必须耗尽才匹配
+        if (pi >= patternParts.length) {
+            return ti >= pathParts.length;
         }
-        for (int index = 0; index < patternParts.length; index++) {
-            if (!"*".equals(patternParts[index]) && !patternParts[index].equals(pathParts[index])) {
-                return false;
+        // 路径耗尽：剩余模式必须全是 ** 才匹配
+        if (ti >= pathParts.length) {
+            for (int i = pi; i < patternParts.length; i++) {
+                if (!"**".equals(patternParts[i])) {
+                    return false;
+                }
             }
+            return true;
         }
-        return true;
+        // ** 递归通配：匹配 0 个或多个段
+        if ("**".equals(patternParts[pi])) {
+            // 尝试跳过 0 个段（** 匹配空）和跳过 1+ 个段（** 匹配当前段后继续递归）
+            return matchesSegments(patternParts, pi + 1, pathParts, ti)
+                || matchesSegments(patternParts, pi, pathParts, ti + 1);
+        }
+        // * 单层通配或精确匹配
+        if ("*".equals(patternParts[pi]) || patternParts[pi].equals(pathParts[ti])) {
+            return matchesSegments(patternParts, pi + 1, pathParts, ti + 1);
+        }
+        return false;
     }
 
     private static String[] split(String value) {
@@ -98,14 +121,7 @@ public final class SyncPolicy {
         if (path == null) {
             return "";
         }
-        String normalized = path.trim();
-        while (normalized.startsWith(".")) {
-            normalized = normalized.substring(1);
-        }
-        while (normalized.endsWith(".")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
+        return path.trim().replaceAll("^[.]+|[.]+$", "");
     }
 
     public static final class Builder {

@@ -17,16 +17,8 @@
 
 ### 获取 `axs-api` JAR
 
-**方式一（推荐）：** 从 [GitHub Releases](https://github.com/ArcartX-Suite/ArcartXSuite-Core/releases) 下载 `axs-api-<version>.jar`。
-
-**方式二：** 克隆本仓库后本地构建：
-
-```bash
-./gradlew :axs-api:jar
-# Windows: gradlew.bat :axs-api:jar
-```
-
-产物位于 `axs-api/build/libs/axs-api-<version>.jar`。
+> 本仓库仅提供 API 源码供阅读参考，不包含构建配置。如需获取编译好的 `axs-api.jar`，请从官方渠道获取。
+jar`。
 
 ### 编写模块
 
@@ -56,41 +48,6 @@ python scripts/sign-module.py pubkey --public-key module-signing-keys/ed25519-pu
 ```
 
 Wiki 完整说明：[模块 Ed25519 签名](https://github.com/ArcartX-Suite/ArcartXSuite-Wiki/blob/main/docs/guide/developer/module-signature.md)
-
-## 发布 `axs-api`（维护者）
-
-仓库已配置 GitHub Actions：[Build axs-api](.github/workflows/build-axs-api.yml)（push/PR 校验）、[Release axs-api](.github/workflows/release-axs-api.yml)（发布 JAR）。
-
-### 方式一：打标签自动发布（推荐）
-
-```bash
-# Linux / macOS
-./scripts/publish-release.sh 1.3.2
-
-# Windows PowerShell
-.\scripts\publish-release.ps1 -Version 1.3.2
-```
-
-推送 `v<version>` 标签后，CI 会构建 `axs-api-<version>.jar` 并创建 [GitHub Release](https://github.com/ArcartX-Suite/ArcartXSuite-Core/releases)。
-
-### 方式二：GitHub 网页
-
-1. 更新 `gradle.properties` 中的 `version`
-2. 在 GitHub **Releases → Create a new release**，标签填 `v<version>` 并发布
-3. CI 自动上传 `axs-api-<version>.jar`
-
-### 方式三：手动触发 Actions
-
-在 **Actions → Release axs-api → Run workflow** 运行，可勾选创建 Release 或仅下载 Artifact。
-
-## 项目结构
-
-| 目录 | 说明 |
-|------|------|
-| `axs-api/` | 模块公共 API（`AXSModule`, `ModuleContext`, `Bridge API` 等）|
-| `axs-placeholder/` | PlaceholderAPI 扩展接口 |
-| `proxy/` | Bungee / Velocity 代理端公共库 |
-| `scripts/` | 发布脚本（`publish-release.*`、`sign-module.py`） |
 
 ## 模块开发指南
 

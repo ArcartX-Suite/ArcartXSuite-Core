@@ -33,13 +33,30 @@ import xuanmo.arcartxsuite.api.bridge.ApiStability;
 public interface EventBusCapability {
 
     /**
-     * 发布一个事件到总线。
+     * 发布一个事件到总线（类型安全版本）。
+     * <p>
+     * payload 可以是任意类型（如自定义 record、BigDecimal、ItemStack 等），
+     * 订阅方通过 {@link BusEvent#typedPayload()} 获取并按需强制转换。
      *
      * @param topic     事件主题
      * @param player    关联玩家（可能为 null，如系统事件）
-     * @param payload   附加数据
+     * @param payload   附加数据（任意类型）
      */
-    void publish(@NotNull String topic, @Nullable Player player, @NotNull Map<String, String> payload);
+    void publish(@NotNull String topic, @Nullable Player player, @NotNull Object payload);
+
+    /**
+     * 发布一个事件到总线（Map<String,String> 版本，向后兼容）。
+     * <p>
+     * 此方法委托给 {@link #publish(String, Player, Object)}，仅用于兼容旧调用方。
+     * 新代码建议直接使用 {@link #publish(String, Player, Object)} 传递类型安全的 payload。
+     *
+     * @param topic     事件主题
+     * @param player    关联玩家（可能为 null，如系统事件）
+     * @param payload   附加数据（字符串键值对）
+     */
+    default void publish(@NotNull String topic, @Nullable Player player, @NotNull Map<String, String> payload) {
+        publish(topic, player, (Object) payload);
+    }
 
     /**
      * 注册当前模块为指定主题的发布者。
@@ -84,13 +101,44 @@ public interface EventBusCapability {
 
     /**
      * 事件数据载体。
+     * <p>
+     * {@link #payload()} 返回 {@code Map<String, String>} 视图（向后兼容），
+     * 当原始 payload 不是 Map 时返回空 Map。
+     * {@link #typedPayload()} 返回原始 payload 对象（类型安全，订阅方按需强制转换）。
      */
     record BusEvent(
         @NotNull String topic,
         @Nullable Player player,
-        @NotNull Map<String, String> payload,
+        @NotNull Object typedPayload,
         long timestamp
-    ) {}
+    ) {
+        /**
+         * 返回 {@code Map<String, String>} 视图的 payload。
+         * 当原始 payload 不是 {@code Map<String, String>} 时返回空 Map。
+         */
+        @SuppressWarnings("unchecked")
+        @NotNull
+        public Map<String, String> payload() {
+            if (typedPayload instanceof Map<?, ?> map) {
+                try {
+                    return (Map<String, String>) map;
+                } catch (ClassCastException ignored) {
+                    return Map.of();
+                }
+            }
+            return Map.of();
+        }
+
+        /**
+         * 返回类型安全的原始 payload 对象。订阅方按需强制转换。
+         *
+         * @return 原始 payload
+         */
+        @NotNull
+        public Object typedPayload() {
+            return typedPayload;
+        }
+    }
 
     /**
      * 事件处理器。

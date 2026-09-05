@@ -27,13 +27,20 @@ MyAXSModule/
     ├── java/com/example/
     │   ├── MyModule.java
     │   ├── MyListener.java
-    │   └── MyPacketHandler.java
+    │   ├── MyPacketHandler.java
+    │   ├── service/
+    │   │   └── MyService.java
+    │   ├── config/
+    │   │   └── MyModuleConfiguration.java
+    │   └── storage/
+    │       └── JdbcMyRepository.java
     └── resources/
         ├── module.yml
-        ├── arcartx/
-        │   └── ui/
-        │       └── my_ui.yml
-        └── MyModule.yml
+        ├── ArcartXMyModule.yml      ← 模块默认配置
+        ├── messages.yml              ← 外部化消息文件
+        └── arcartx/
+            └── ui/
+                └── my_ui.yml         ← ArcartX UI 文件
 ```
 
 ### build.gradle.kts
@@ -73,7 +80,7 @@ tasks.jar {
 
 ## 第二步：编写 module.yml
 
-每个模块必须包含 `module.yml`，放在 `src/main/resources/` 下：
+每个模块必须包含 `module.yml`，放在 `src/main/resources/` 下（打包后位于 JAR 根目录）：
 
 ```yaml
 id: mymodule
@@ -81,10 +88,13 @@ name: MyModule
 version: 1.0.0
 main: com.example.MyModule
 api-version: 1.0
+
 depends: []
 softdepends: []
-external-depends: []
-external-softdepends: []
+external-depends:
+  - PlaceholderAPI
+external-softdepends:
+  - AuthMe
 ```
 
 | 字段 | 说明 |
@@ -96,63 +106,16 @@ external-softdepends: []
 | `api-version` | 兼容的 AXS API 版本 |
 | `depends` | 硬依赖的其他模块 ID（未加载则本模块拒绝启动）|
 | `softdepends` | 软依赖的其他模块 ID（未加载则跳过，不报错）|
+| `external-depends` | 硬依赖的 Bukkit 插件（未安装则本模块拒绝启动）|
+| `external-softdepends` | 软依赖的 Bukkit 插件（未安装则跳过相关功能）|
+
+> **依赖选择**：如果模块需要 PlaceholderAPI 占位符，放 `external-depends`；如果只是可选增强（如 AuthMe 登录支持），放 `external-softdepends`。
 
 ---
 
 ## 第三步：实现模块入口类
 
-### 极简模式：直接实现 AXSModule
-
-适用于无配置、无 UI、无监听器的极简功能模块。
-
-```java
-package com.example;
-
-import xuanmo.arcartxsuite.api.AXSModule;
-import xuanmo.arcartxsuite.api.ModuleContext;
-import xuanmo.arcartxsuite.api.ModuleDescriptor;
-
-public final class MyModule implements AXSModule {
-
-    private ModuleContext context;
-
-    @Override
-    public ModuleDescriptor descriptor() {
-        return ModuleDescriptor.builder("mymodule")
-            .name("MyModule")
-            .version("1.0.0")
-            .mainClass(getClass().getName())
-            .build();
-    }
-
-    @Override
-    public boolean onEnable(ModuleContext context) throws Exception {
-        this.context = context;
-        context.logger().info("MyModule 已启用！");
-        return true;
-    }
-
-    @Override
-    public void onDisable() {
-        context.logger().info("MyModule 已关闭。");
-    }
-
-    @Override
-    public void onReload() throws Exception {
-        onDisable();
-        if (context != null) onEnable(context);
-    }
-
-    @Override
-    public boolean isReady() {
-        return true;
-    }
-}
-```
-
-### 推荐模式：继承 AbstractAXSModule
-
-`AbstractAXSModule` 封装了配置导出、UI 绑定、监听器注册、命令注册、PAPI 扩展等通用逻辑。只需覆写声明式方法和抽象方法即可。
+所有 AXS 模块均继承 `AbstractAXSModule`，通过覆写声明式方法声明模块能力，基类在 `onEnable` 时自动处理配置导出、UI 绑定、命令注册、监听器注册等。
 
 ```java
 package com.example;
@@ -162,10 +125,24 @@ import java.util.List;
 import java.util.Map;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.event.Listener;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xuanmo.arcartxsuite.api.AbstractAXSModule;
+import xuanmo.arcartxsuite.api.ModuleCommandHandler;
 import xuanmo.arcartxsuite.api.ModuleDescriptor;
+import xuanmo.arcartxsuite.api.ModuleUiSpec;
+import xuanmo.arcartxsuite.api.PacketHandlerSpec;
+import xuanmo.arcartxsuite.api.config.ModuleConfig;
+import xuanmo.arcartxsuite.api.config.SyncPolicy;
+import xuanmo.arcartxsuite.api.config.ValidationRule;
+import xuanmo.arcartxsuite.api.config.ValueType;
 
-public final class MyModule extends AbstractAXSModule {
+public final class MyModule extends AbstractAXSModule implements ModuleCommandHandler {
+
+    private MyModuleConfiguration configuration;
+    private MyService service;
+
+    // ── 模块描述 ──────────────────────────────────────
 
     @Override
     public ModuleDescriptor descriptor() {
@@ -176,54 +153,114 @@ public final class MyModule extends AbstractAXSModule {
             .build();
     }
 
-    // ── 声明式配置 ──
+    // ── 配置规约（合并原 configFileName / messagesFileName / syncPolicy 等）──
 
     @Override
-    protected String configFileName() {
-        return "MyModule.yml"; // 会从模块 Jar 自动导出到 plugins/ArcartXSuite/data/mymodule/config.yml
+    protected @NotNull ModuleConfig configSpec() {
+        return ModuleConfig.builder()
+            .configFileName("ArcartXMyModule.yml")   // 从 Jar 导出到 data/mymodule/config.yml
+            .messagesFileName("messages.yml")         // 外部化消息文件
+            .syncPolicy(SyncPolicy.builder()
+                .dynamicSection("rewards")            // 声明动态配置节（不在诊断中校验结构）
+                .build())
+            .currentVersion(2)                        // 配置版本号，破坏性改动时递增
+            .validations(List.of(
+                ValidationRule.required("storage.mode", ValueType.STRING),
+                ValidationRule.of("max-items", ValueType.INT).withRange(1, 1000)
+            ))
+            .build();
     }
 
-    @Override
-    protected String messagesFileName() {
-        return "messages.yml"; // 外部化消息文件，支持 & 颜色码和 {0} 占位符
-    }
+    // ── UI 资源规约（合并原 uiResourceMappings / overwriteUiFiles）──
 
     @Override
-    protected Map<String, String> uiResourceMappings() {
-        return Map.of(
+    protected @NotNull ModuleUiSpec uiSpec() {
+        return ModuleUiSpec.of(Map.of(
             "arcartx/ui/my_ui.yml", "ui/my_ui.yml"
-        );
+        ));
     }
+
+    // ── 客户端包处理器规约（合并原 createPacketHandler / priority 等）──
 
     @Override
-    protected List<Listener> createListeners() {
-        return List.of(new MyListener(context));
+    protected @NotNull PacketHandlerSpec createPacketHandlerSpec() {
+        return PacketHandlerSpec.of(new MyPacketHandler());
     }
+
+    // ── EventBus 发布主题（供其他模块检测本模块是否已加载）──
 
     @Override
-    protected Map<String, TabExecutor> commandBindings() {
-        return Map.of("mycmd", new MyCommand(this));
+    protected List<String> publishedTopics() {
+        return List.of("axs.mymodule.item_purchased");
     }
 
-    // ── 抽象方法实现 ──
+    // ── 抽象方法：加载配置 ────────────────────────────
 
     @Override
-    protected void loadConfiguration(File configFile) {
-        // 读取你的配置文件（configFile 已确保存在）
+    protected void loadConfiguration(@Nullable File configFile) throws Exception {
+        configuration = MyModuleConfiguration.load(
+            YamlConfiguration.loadConfiguration(configFile),
+            messages(),  // MessageProvider，由基类根据 messagesFileName 初始化
+            logger);
     }
+
+    // ── 抽象方法：启动服务 ────────────────────────────
 
     @Override
-    protected void startService() {
-        // 注册 ArcartX UI
-        bindUi("my_ui", "ui/my_ui.yml");
+    protected void startService() throws Exception {
+        service = new MyService(plugin, configuration, packetBridge, logger);
+        service.start();
 
-        context.logger().info("MyModule 服务已启动");
+        // 注册 UI（在 startService 中调用，基类已先完成资源导出）
+        registerModuleUi("ui/my_ui.yml", "AXS:my_ui", true);
+
+        // 注册 Capability（供其他模块调用）
+        registerCapability(MyCapability.class, new MyCapabilityImpl());
     }
+
+    // ── 抽象方法：停止服务 ────────────────────────────
 
     @Override
     protected void stopService() {
-        // AbstractAXSModule 会自动清理监听器、命令、占位符、UI 等
-        context.logger().info("MyModule 服务已停止");
+        if (service != null) {
+            service.shutdown();
+            service = null;
+        }
+    }
+
+    // ── 声明式：事件监听器（基类自动注册/注销）──
+
+    @Override
+    protected @NotNull List<Listener> createListeners() {
+        return List.of(new MyListener(this));
+    }
+
+    // ── 声明式：独立玩家命令（需在 plugin.yml 声明命令）──
+
+    @Override
+    protected @NotNull Map<String, TabExecutor> commandBindings() {
+        return Map.of("mycmd", new MyPlayerCommand(() -> service, messages()));
+    }
+
+    // ── 声明式：PlaceholderAPI 占位符 ──
+
+    @Override
+    protected @Nullable Object createPlaceholderExpansion() {
+        return new MyPlaceholderExpansion(plugin, () -> service);
+    }
+
+    // ── ModuleCommandHandler：/axs mymodule 子命令 ──
+
+    @Override public String commandId() { return "mymodule"; }
+
+    @Override public List<String> actions() {
+        return List.of("help", "status", "reload");
+    }
+
+    @Override
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull String label, @NotNull String[] args) {
+        // 处理 /axs mymodule <action>
+        return true;
     }
 }
 ```
@@ -232,184 +269,227 @@ public final class MyModule extends AbstractAXSModule {
 
 ## 第四步：AbstractAXSModule 声明式 API 详解
 
-继承 `AbstractAXSModule` 时，可通过覆写以下方法声明模块能力，基类在 `onEnable` 时自动处理：
+继承 `AbstractAXSModule` 时，通过覆写以下方法声明模块能力。基类在 `onEnable` 时按固定顺序自动处理。
 
-### 配置管理
+### onEnable 执行顺序
 
-| 方法 | 说明 | 示例 |
-|------|------|------|
-| `configFileName()` | 模块默认配置文件名（从 Jar 导出到 `data/<moduleId>/config.yml`） | `"MyModule.yml"` |
-| `messagesFileName()` | 外部化消息文件名（支持 `&` 颜色码和 `{0}` 占位符） | `"messages.yml"` |
-| `defaultSyncPolicy()` | 配置同步策略，动态节点用 `SyncPolicy.builder().dynamicSection("xxx").build()` | 默认 `strict()` |
-| `currentConfigVersion()` | 配置版本号，破坏性改动时递增 | 默认 `1` |
-| `configVersionPath()` | 版本号字段路径 | 默认 `"config-version"` |
-| `migrationFolder()` | 迁移规则文件夹（Jar 内相对路径） | 默认 `"migrations"` |
-| `mainConfigValidations()` | 配置字段校验规则列表 | 默认空列表 |
-| `additionalConfigSpecs()` | 附属配置规约（如 `chat/channels/*.yml`） | 默认空列表 |
+```
+1. 导出并加载配置（configSpec → loadConfiguration）
+2. 导出外部化消息（configSpec.messagesFileName）
+3. 导出 UI 资源并绑定（uiSpec）
+4. 绑定命令（commandBindings）
+5. 注册 EventBus 发布主题（publishedTopics）
+6. 启动服务（startService）
+7. 注册事件监听器（createListeners）
+8. 注册 PlaceholderAPI（createPlaceholderExpansion）
+9. 注册客户端包处理器（createPacketHandlerSpec）
+10. 注册客户端初始化回调（createInitializedHandler）
+```
 
-### UI 与资源
+> **关键**：`startService()` 在命令绑定之后、监听器注册之前调用。命令使用 `Supplier` 延迟引用服务，即使服务启动失败命令仍可注册。
 
-| 方法 | 说明 | 示例 |
-|------|------|------|
-| `uiResourceMappings()` | Jar 内资源路径 → 宿主数据目录输出路径 | `Map.of("arcartx/ui/xxx.yml", "ui/xxx.yml")` |
-| `overwriteUiFiles()` | 是否覆写已有 UI 文件 | 默认 `false` |
+### 配置规约：`configSpec()`
 
-### 事件与命令
+返回 `ModuleConfig` record，合并了原 8 个配置钩子：
 
-| 方法 | 说明 | 示例 |
-|------|------|------|
-| `createListeners()` | Bukkit 事件监听器列表（自动注册/注销） | `List.of(new MyListener())` |
-| `commandBindings()` | 独立玩家命令：命令名 → Executor（需在 plugin.yml 声明命令） | `Map.of("mycmd", new MyCmd())` |
+| 字段 | 说明 | 默认值 |
+|------|------|--------|
+| `configFileName` | 模块配置文件名（Jar 内资源路径），null 表示无配置文件 | null |
+| `messagesFileName` | 外部化消息文件名，null 表示不使用 | null |
+| `syncPolicy` | 配置同步策略 | `SyncPolicy.strict()` |
+| `currentVersion` | 内置配置版本号 | 1 |
+| `versionPath` | 版本号在 YAML 中的路径 | `"config-version"` |
+| `migrationFolder` | Jar 内迁移规则目录 | `"migrations"` |
+| `validations` | 配置字段校验规则列表 | 空列表 |
+| `additionalSpecs` | 附属配置 spec（如 `chat/channels/*.yml`） | 空列表 |
 
-### PAPI 与客户端
+```java
+@Override
+protected @NotNull ModuleConfig configSpec() {
+    return ModuleConfig.builder()
+        .configFileName("ArcartXMyModule.yml")
+        .messagesFileName("messages.yml")
+        .syncPolicy(SyncPolicy.builder()
+            .dynamicSection("rewards")        // 动态节：用户自定义 key，诊断时不校验结构
+            .dynamicSection("commands")
+            .build())
+        .currentVersion(3)
+        .validations(List.of(
+            ValidationRule.required("storage.mode", ValueType.STRING),
+            ValidationRule.of("max-items", ValueType.INT).withRange(1, 1000),
+            ValidationRule.of("tax-rate", ValueType.DOUBLE).withRange(0.0, 0.99)
+        ))
+        .build();
+}
+```
 
-| 方法 | 说明 | 示例 |
-|------|------|------|
-| `createPlaceholderExpansion()` | PAPI 占位符扩展实例（返回 null 不注册） | `new MyExpansion()` |
-| `createPacketHandler()` | 客户端自定义包处理器 | `new MyPacketHandler()` |
-| `packetHandlerPriority()` | 处理器优先级（越小越优先） | 默认 `0` |
-| `createInitializedHandler()` | 客户端初始化完成回调 | `new MyInitHandler()` |
+### UI 资源规约：`uiSpec()`
+
+返回 `ModuleUiSpec` record：
+
+```java
+@Override
+protected @NotNull ModuleUiSpec uiSpec() {
+    return ModuleUiSpec.of(Map.of(
+        "arcartx/ui/my_ui.yml", "ui/my_ui.yml",
+        "arcartx/ui/my_hud.yml", "ui/my_hud.yml"
+    ));
+    // 第二参数 overwrite=true 时覆盖用户已修改的 UI 文件（一般不推荐）
+}
+```
+
+- **键**：Jar 内资源路径（`src/main/resources/` 下的相对路径）
+- **值**：导出到宿主数据目录的相对路径（`plugins/ArcartXSuite/ui/` 下）
+- 基类在 `onEnable` 时自动导出，**不会覆盖**已有文件（除非 `overwrite=true`）
+
+### 客户端包处理器规约：`createPacketHandlerSpec()`
+
+返回 `PacketHandlerSpec` record，合并了原 4 个包相关钩子：
+
+```java
+// 简单注册（默认优先级 0）
+@Override
+protected @NotNull PacketHandlerSpec createPacketHandlerSpec() {
+    return PacketHandlerSpec.of(new MyPacketHandler());
+}
+
+// 指定优先级（越小越先，EventPacket 建议 100）
+@Override
+protected @NotNull PacketHandlerSpec createPacketHandlerSpec() {
+    return PacketHandlerSpec.of(new MyPacketHandler(), 0);
+}
+
+// 完整注册（含归属元数据，用于 PacketGuard 路由）
+@Override
+protected @NotNull PacketHandlerSpec createPacketHandlerSpec() {
+    return PacketHandlerSpec.of(handler, 0, "AXS_MY_MODULE", "mymodule");
+}
+```
+
+> **无客户端包的模块**：返回 `PacketHandlerSpec.NONE`（默认值），基类不注册。
+
+### EventBus 发布主题：`publishedTopics()`
+
+声明本模块通过 EventBus 发布的事件主题。基类在 `startService` **之前**自动注册到 EventBus，确保其他模块可在启动时通过 `EventBusCapability.hasPublisher(topic)` 检测本模块是否已加载。
+
+```java
+@Override
+protected List<String> publishedTopics() {
+    return List.of(
+        "axs.mymodule.item_purchased",
+        "axs.mymodule.quest_completed"
+    );
+}
+```
+
+> **命名规范**：使用 `axs.<moduleId>.<event>` 格式，避免与其他模块冲突。
+
+### 客户端初始化回调：`createInitializedHandler()`
+
+当玩家客户端 ArcartX 模组完成初始化时触发，适合在此打开 HUD 或同步初始数据：
+
+```java
+@Override
+protected @Nullable ClientInitializedHandler createInitializedHandler() {
+    return player -> {
+        service.handleClientInitialized(player);
+    };
+}
+```
+
+### 其他声明式方法
+
+| 方法 | 说明 | 默认值 |
+|------|------|--------|
+| `createListeners()` | Bukkit 事件监听器列表（自动注册/注销） | 空列表 |
+| `commandBindings()` | 独立玩家命令：命令名 → TabExecutor | 空 Map |
+| `createPlaceholderExpansion()` | PAPI 占位符扩展实例，null 不注册 | null |
 
 ---
 
 ## 第五步：UI 绑定与资源路径
 
-AXS 模块的 UI 由两部分组成：**资源文件** 和 **运行时绑定**。
-
 ### 1. 声明 UI 资源映射
 
-在 `src/main/resources/` 下放置 UI YAML 文件：
+在 `src/main/resources/arcartx/ui/` 下放置 UI YAML 文件，通过 `uiSpec()` 声明映射。基类在 `onEnable` 时自动导出到 `plugins/ArcartXSuite/ui/`。
 
-```
-src/main/resources/
-  arcartx/
-    └── ui/
-        └── my_ui.yml
-```
+### 2. 运行时注册 UI
 
-覆写 `uiResourceMappings()`：
-
-```java
-@Override
-protected Map<String, String> uiResourceMappings() {
-    return Map.of(
-        "arcartx/ui/my_ui.yml", "ui/my_ui.yml"
-    );
-}
-```
-
-基类在 `onEnable` 时会自动将 `arcartx/ui/my_ui.yml` 从模块 Jar 导出到 `plugins/ArcartXSuite/ui/my_ui.yml`。
-
-### 2. 运行时绑定 UI
-
-在 `startService()` 中调用 `bindUi()`：
+在 `startService()` 中调用 `registerModuleUi()` 将 UI 注册到 ArcartX 客户端：
 
 ```java
 @Override
 protected void startService() {
-    // 将导出的 UI 文件注册到 ArcartX 客户端
-    bindUi("my_ui", "ui/my_ui.yml");
+    service = new MyService(...);
+    service.start();
+
+    // registerModuleUi(relativeUiPath, uiId, closeOnReload)
+    registerModuleUi("ui/my_ui.yml", "AXS:my_ui", true);
+    registerModuleUi("ui/my_hud.yml", "AXS:my_hud", true);
 }
 ```
 
-`bindUi(uiId, relativePath)` 封装了以下逻辑：
+- `relativeUiPath`：相对于 `plugins/ArcartXSuite/` 的 UI 文件路径（与 `uiSpec()` 的值一致）
+- `uiId`：UI 唯一标识，建议用 `AXS:<name>` 前缀
+- `closeOnReload`：reload 时是否关闭客户端 UI
 
-```java
-// 等效于：
-File uiFile = new File(context.uiFolder(), "ui/my_ui.yml");
-UiBinding binding = context.prepareUiBinding("MyModule", "my_ui", true, uiFile);
-recordUiBinding("ui/my_ui.yml", binding);
-```
+### 3. reload 时 UI 保持
 
-### 3. reload 时 UI 不注销
-
-`AbstractAXSModule` 内部使用 `reloading` 标志处理 reload 逻辑：
-
-```java
-@Override
-public void onReload() throws Exception {
-    reloading = true;   // 标记 reload 中
-    try {
-        onDisable();
-        onEnable(context);
-    } finally {
-        reloading = false;
-    }
-}
-```
-
-`onDisable()` 检测到 `reloading == true` 时会**跳过 UI 注销**，避免客户端丢失已打开的 HUD 或菜单界面。reload 完成后新配置自动生效，UI 保持打开状态。
-
-> **开发者无需手动处理**：基类已内置此逻辑，你只需在 `loadConfiguration()` 中重新读取配置即可。
+`AbstractAXSModule` 内部使用 `reloading` 标志，reload 时跳过 UI 注销，避免客户端丢失已打开的 HUD 或菜单。开发者无需手动处理。
 
 ---
 
-## 第六步：使用 ModuleContext
+## 第六步：使用 ModuleContext 与基类注入字段
 
-`ModuleContext` 是模块与宿主通信的唯一接口，禁止直接引用宿主实现类。
+`AbstractAXSModule` 在 `onEnable` 时自动从 `ModuleContext` 注入以下 `protected` 字段，子类直接访问即可：
 
-### 基础设施
+### 核心字段
 
 ```java
-// 宿主插件实例（注册事件、调度任务）
-JavaPlugin plugin = context.plugin();
-
-// 带模块前缀的 Logger
-Logger logger = context.logger();
-
-// 模块私有数据目录（plugins/ArcartXSuite/data/mymodule/）
-File dataFolder = context.dataFolder();
-
-// UI 文件输出目录（plugins/ArcartXSuite/ui/）
-File uiFolder = context.uiFolder();
+// 基础设施（直接访问 protected 字段）
+plugin           // JavaPlugin 实例
+logger           // 带模块前缀的 Logger
+dataFolder       // 模块私有数据目录（plugins/ArcartXSuite/data/mymodule/）
+pluginDataFolder // 宿主数据根目录（plugins/ArcartXSuite/）
+moduleClassLoader() // 模块 ClassLoader
+messages()       // MessageProvider（由 configSpec.messagesFileName 初始化）
 ```
 
 ### ArcartX 桥接
 
 ```java
-// 获取 ArcartX 发包桥接（UI 注册、自定义数据包）
-PacketBridgeAPI packetBridge = context.packetBridge();
-
-// 发送自定义数据包到客户端
-packetBridge.sendPacket(player, "my_channel", Map.of("key", "value"));
-
-// 获取客户端桥接（检测客户端是否在线、发送客户端事件）
-ClientBridgeAPI clientBridge = context.clientBridge();
-
-// 获取 ItemStack 桥接（序列化/反序列化带 NBT 的物品）
-ItemBridgeAPI itemBridge = context.itemStackBridge();
-
-// 获取 Prop 桥接（快捷道具栏）
-PropBridgeAPI propBridge = context.propBridge();
+packetBridge       // PacketBridgeAPI — 发送自定义包、注册/打开/关闭 UI
+clientBridge       // ClientBridgeAPI — 检测客户端是否在线
+itemStackBridge    // ItemBridgeAPI — 序列化/反序列化带 NBT 的物品
+propBridge         // PropBridgeAPI — 快捷道具栏
+worldTextureBridge // WorldTextureBridgeAPI — 世界纹理
 ```
 
 ### 全局桥接
 
 ```java
-// 物品来源注册表（统一 MythicMobs/NeigeItems/MMOItems/Overture）
-ItemSourceRegistry itemSource = context.itemSourceRegistry();
+itemSourceRegistry    // ItemSourceRegistry — MythicMobs/NeigeItems/MMOItems/Overture 物品来源
+itemMatcher           // ItemMatcherAPI — 按 id/名称/NBT 匹配物品
+itemRewardDispatcher  // ItemRewardDispatcher — 统一物品奖励发放
+pendingRewardService  // PendingRewardService — 待发放奖励队列
+vanillaItemNameBridge // VanillaItemNameBridge — 原版物品中文名解析
+currencyManager       // CurrencyBridgeAPI — Vault/PlayerPoints/XConomy 等
+rondoBridge           // RondoBridge — Rondo 经济系统
+attributeBridge       // AttributeBridgeRegistry — AttributePlus/Crane/MythicLib/Symphony
+ariaBridge            // AriaBridge — Aria 脚本桥接
+scriptConditionEvaluator // ScriptConditionEvaluator — 条件评估器
+```
 
-// 物品匹配器（按 id/名称/NBT 匹配）
-ItemMatcherAPI matcher = context.itemMatcher();
+### 基础设施服务
 
-// 货币管理器（Vault/PlayerPoints 等）
-CurrencyBridgeAPI currency = context.currencyManager();
-
-// 属性桥接注册表（AttributePlus/CraneAttribute/MythicLib/Symphony）
-AttributeBridgeRegistry attr = context.attributeBridge();
-
-// Aria 脚本桥接（需服务器安装 Blink 系插件）
-AriaBridge aria = context.ariaBridge();
-if (aria.available()) {
-    // 执行 Aria 脚本
-}
-
-// 条件评估器（PlaceholderAPI + Aria 脚本混合条件）
-ScriptConditionEvaluator eval = context.scriptConditionEvaluator();
-boolean ok = eval.evaluate(player, "%player_name% == 'Steve' && aria:hasItem('diamond')");
-
-// TACZ 兼容状态查询
-boolean taczActive = context.taczActive();
+```java
+storageManager       // StorageManager — 统一数据源管理（共享/自建双模式）
+scheduler            // SchedulerAPI — 调度器
+crossServer          // CrossServerAPI — 跨服传输（Redis + Proxy）
+packetGuard          // PacketGuardAPI — 客户端包频率限制（可能为 null）
+accountTypeService   // AccountTypeService — 账号类型识别
+placeholderResolver  // PlaceholderResolverAPI — 占位符解析
+expansionRegistry    // PlaceholderExpansionRegistry — PAPI 扩展注册表
 ```
 
 ### 高级桥接（模块独立管理生命周期）
@@ -423,52 +503,17 @@ waypoint.create(player, "目标", x, y, z, Color.RED);
 AdyeshachNpcBridgeAPI npc = context.createAdyeshachNpcBridge();
 ```
 
-### 跨模块通信
-
-```java
-// 按类型获取其他模块实例
-Optional<OtherModule> other = context.getModule(OtherModule.class);
-other.ifPresent(m -> m.doSomething());
-
-// 按 ID 获取
-Optional<AXSModule> mod = context.getModule("othermodule");
-
-// Capability 跨模块通信
-context.registerCapability(MyService.class, new MyServiceImpl());
-MyService service = context.getCapability(MyService.class);
-```
-
-### 安全与账号
-
-```java
-// 客户端包频率限制（可能为 null，开源版宿主不含实现）
-PacketGuardAPI guard = context.packetGuard();
-
-// 账号类型识别（微软正版 / LittleSkin / 离线）
-AccountTypeService account = context.accountTypeService();
-AccountType type = account.resolve(player);
-```
-
-### 跨服传输
-
-```java
-// Redis + Proxy 双后端统一跨服通道
-CrossServerAPI cross = context.crossServer();
-cross.broadcast("my_channel", message);
-cross.sendToServer("lobby", "my_channel", payload);
-```
-
 ### 资源与工具
 
 ```java
 // 从模块 Jar 读取资源
-InputStream in = context.openResource("arcartx/ui/my_ui.yml", getClass().getClassLoader());
+InputStream in = openResource("arcartx/ui/my_ui.yml", moduleClassLoader());
 
 // 导出资源到宿主目录
-context.exportResource("config.yml", targetFile, false);
+exportResource("shops/example.yml", targetFile, false);
 
 // 检查外部插件是否安装
-boolean hasPapi = context.hasPlugin("PlaceholderAPI");
+boolean hasPapi = hasPlugin("PlaceholderAPI");
 ```
 
 ---
@@ -478,48 +523,37 @@ boolean hasPapi = context.hasPlugin("PlaceholderAPI");
 实现 `ModuleCommandHandler` 接口即可自动注册 `/axs mymodule ...` 子命令：
 
 ```java
-import xuanmo.arcartxsuite.api.ModuleCommandHandler;
-
 public final class MyModule extends AbstractAXSModule implements ModuleCommandHandler {
 
-    @Override
-    public String commandId() {
-        return "mymodule"; // /axs mymodule ...
+    private MyAdminCommand adminCommand;
+
+    @Override public String commandId() { return "mymodule"; }
+
+    @Override public List<String> actions() {
+        return adminCommand != null ? adminCommand.actions() : List.of("help", "status");
     }
 
     @Override
-    public List<String> actions() {
-        return List.of("help", "status", "reload");
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull String label, @NotNull String[] args) {
+        return adminCommand != null && adminCommand.onCommand(sender, label, args);
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, String label, String[] args) {
-        if (args.length < 2) {
-            sender.sendMessage("用法: /axs mymodule <action>");
-            return true;
-        }
-        String action = args[1];
-        switch (action) {
-            case "status":
-                sender.sendMessage("MyModule 运行中");
-                break;
-            default:
-                sender.sendMessage("未知命令: " + action);
-        }
-        return true;
+    public @Nullable List<String> onTabComplete(@NotNull CommandSender sender, @NotNull String[] args) {
+        return adminCommand != null ? adminCommand.onTabComplete(sender, args) : null;
     }
 }
 ```
+
+> **实际模式**：大多数模块将命令逻辑委托给独立的 `*AdminCommand` 类，`ModuleCommandHandler` 只做转发。
 
 ---
 
 ## 第八步：处理客户端包
 
-客户端通过 ArcartX 模组向服务器发送自定义数据包，模块实现 `ClientPacketHandler` 接收：
+客户端通过 ArcartX 模组向服务器发送自定义数据包，模块通过 `createPacketHandlerSpec()` 注册处理器：
 
 ```java
-import xuanmo.arcartxsuite.api.ClientPacketHandler;
-
 public class MyPacketHandler implements ClientPacketHandler {
 
     @Override
@@ -528,60 +562,274 @@ public class MyPacketHandler implements ClientPacketHandler {
     }
 
     @Override
-    public void handle(Player player, Map<String, Object> data) {
-        String value = (String) data.get("value");
+    public boolean handle(@NotNull Player player, @NotNull String packetId,
+                          @NotNull List<String> data) {
+        String value = data.isEmpty() ? "" : data.get(0);
         player.sendMessage("收到客户端数据: " + value);
+        return true; // 返回 true 表示已处理
+    }
+}
+```
+
+### 多包 ID 路由
+
+一个模块可以处理多个 packet ID。在 `handle` 方法中通过 `packetId` 参数区分：
+
+```java
+@Override
+protected @NotNull PacketHandlerSpec createPacketHandlerSpec() {
+    return PacketHandlerSpec.of((player, packetId, data) -> {
+        switch (packetId) {
+            case "AXS_MY_MODULE_MAIN" -> service.handleMainPacket(player, data);
+            case "AXS_MY_MODULE_ADMIN" -> service.handleAdminPacket(player, data);
+            default -> { return false; } // 不属于本模块的包
+        }
+        return true;
+    });
+}
+```
+
+### 主线程安全
+
+涉及背包或经济操作的包处理应切到主线程：
+
+```java
+@Override
+protected @NotNull PacketHandlerSpec createPacketHandlerSpec() {
+    return PacketHandlerSpec.of((player, packetId, data) -> {
+        if (Bukkit.isPrimaryThread()) {
+            service.handleClientPacket(player, packetId, data);
+        } else {
+            AxsScheduler.runTask(plugin, () ->
+                service.handleClientPacket(player, packetId, data));
+        }
+        return true;
+    });
+}
+```
+
+---
+
+## 第九步：Capability 与跨模块通信
+
+### 核心原则
+
+**模块间不直接持有彼此实例，也不使用 `context.getModule()`。** 所有跨模块通信通过 Capability 注册表完成。
+
+### 注册 Capability
+
+模块在 `startService()` 中注册自身能力：
+
+```java
+@Override
+protected void startService() {
+    service = new MyService(...);
+    service.start();
+
+    // 注册业务能力
+    registerCapability(MyCapability.class, new MyCapabilityImpl());
+
+    // 注册系统能力（几乎所有数据型模块都应注册）
+    registerCapability(PlayerDataPurgeable.class, new PlayerDataPurgeable() {
+        @Override public @NotNull String moduleId() { return "mymodule"; }
+        @Override public int purgePlayerData(@NotNull UUID playerUuid) {
+            try { return repository.deletePlayerData(playerUuid); }
+            catch (Exception e) { logger.warning("purge 失败: " + e.getMessage()); return -1; }
+        }
+        @Override public int purgeAllPlayerData() {
+            try { return repository.deleteAllPlayerData(); }
+            catch (Exception e) { logger.warning("purgeAll 失败: " + e.getMessage()); return -1; }
+        }
+    });
+
+    registerCapability(DatabaseMigratable.class, new DatabaseMigratable() {
+        @Override public @NotNull String moduleId() { return "mymodule"; }
+        @Override public @NotNull MigrationResult migrateDatabase(
+                @NotNull StorageDescriptor target, boolean overwrite) {
+            return repository.migrateData(target, overwrite);
+        }
+        @Override public @NotNull StorageDescriptor currentDescriptor() {
+            return repository.getDescriptor();
+        }
+    });
+}
+```
+
+### 使用其他模块的 Capability
+
+通过 `getCapability()` 获取。**使用 `Supplier` 延迟查找**，避免模块启动顺序问题：
+
+```java
+@Override
+protected void startService() {
+    // 延迟查找：模块启动时 mail 模块可能还未加载
+    Supplier<MailDispatchable> mailSupplier = () -> getCapability(MailDispatchable.class);
+    Supplier<SignalDispatchable> signalSupplier = () -> getCapability(SignalDispatchable.class);
+
+    service = new MyService(..., mailSupplier, signalSupplier, ...);
+    service.start();
+}
+```
+
+### 常用 Capability 一览
+
+| Capability | 提供模块 | 用途 |
+|---|---|---|
+| `MailDispatchable` | mail | 发送带附件的系统邮件 |
+| `SignalDispatchable` | eventpacket | 派发事件信号 |
+| `EventBusCapability` | 宿主 | 事件总线（发布/订阅主题） |
+| `ChatCardSendable` | chat | 发送聊天卡片 |
+| `ChatMutable` | chat | 禁言/解禁管理 |
+| `SubtitlePlayable` | announcer | 播放字幕 |
+| `TitleGrantable` | title | 授予称号 |
+| `TabRefreshable` | tab | 刷新 Tab 列表 |
+| `MapNavigable` | map | 地图导航 |
+| `QuestGpsNavigable` | questgps | 任务导航 |
+| `EssentialsQueryable` | essentials | 查询 Essentials 状态 |
+| `WarehouseAutoDepositable` | warehouse | 自动存入仓库 |
+| `PickupInterceptor` | pickup | 拦截物品拾取 |
+| `PlayerDataPurgeable` | 各数据模块 | `/axs purge` 玩家数据清除 |
+| `DatabaseMigratable` | 各数据模块 | `/axs migrate` 数据库迁移 |
+
+### EventBus 事件总线
+
+通过 `EventBusCapability` 发布/订阅事件，实现完全解耦的事件通知：
+
+```java
+// 发布事件（在 service 中）
+EventBusCapability eventBus = getCapability(EventBusCapability.class);
+if (eventBus != null) {
+    eventBus.publish("axs.mymodule.item_purchased", Map.of("player", uuid, "item", itemId));
+}
+
+// 订阅事件（在其他模块中）
+EventBusCapability eventBus = getCapability(EventBusCapability.class);
+if (eventBus != null && eventBus.hasPublisher("axs.mymodule.item_purchased")) {
+    eventBus.subscribe("axs.mymodule.item_purchased", payload -> {
+        // 处理事件
+    });
+}
+```
+
+> **`publishedTopics()` 的作用**：声明主题后，其他模块在启动时就能通过 `hasPublisher(topic)` 检测本模块是否已加载，无需等待本模块的 `startService` 完成。
+
+---
+
+## 第十步：存储层（数据库模块）
+
+需要持久化存储的模块使用 `AbstractModuleRepository` + `StorageManager` 双模式。
+
+### 1. 定义 StorageConfiguration
+
+```java
+public record StorageConfiguration(
+    String mode,           // "sqlite" 或 "mysql"
+    String sqliteFileName,
+    String host, int port, String database,
+    String username, String password,
+    String tablePrefix, int poolSize,
+    boolean shared         // 是否使用共享数据源
+) {
+    public boolean hasOverride() {
+        return !shared && "mysql".equalsIgnoreCase(mode);
+    }
+
+    public StorageDescriptor toDescriptor() {
+        if (!isSqlite()) {
+            return StorageDescriptor.mysql(host, port, database, username, password, poolSize, tablePrefix);
+        }
+        return StorageDescriptor.sqlite(sqliteFileName);
+    }
+
+    public boolean isSqlite() {
+        return !"mysql".equalsIgnoreCase(mode);
+    }
+}
+```
+
+### 2. 实现 Repository
+
+```java
+public final class JdbcMyRepository extends AbstractModuleRepository {
+
+    private String tRecords;
+
+    // 新构造：接收 DataSource + Descriptor（由 StorageManager 解析）
+    public JdbcMyRepository(DataSource dataSource, StorageDescriptor descriptor,
+                            File dataFolder, Logger logger) {
+        super("AXS-MyModule", dataFolder, descriptor, logger, dataSource);
     }
 
     @Override
-    public int priority() {
-        return 0; // 数字越小优先级越高
+    protected void onInitialize(Connection conn) throws SQLException {
+        tRecords = descriptor().tablePrefix() + "records";
+        try (Statement stmt = conn.createStatement()) {
+            if (isMysql()) {
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tRecords + " ("
+                    + "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                    + "player_uuid CHAR(36) NOT NULL,"
+                    + "data MEDIUMTEXT NOT NULL,"
+                    + "created_at BIGINT NOT NULL,"
+                    + "INDEX idx_player (player_uuid))");
+            } else {
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tRecords + " ("
+                    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + "player_uuid TEXT NOT NULL,"
+                    + "data TEXT NOT NULL,"
+                    + "created_at INTEGER NOT NULL)");
+            }
+        }
+    }
+
+    @Override
+    protected List<String> playerDataTables() {
+        return List.of(tRecords);
     }
 }
 ```
 
-在 `AbstractAXSModule` 中通过声明式方法注册：
+### 3. 在 startService 中初始化（共享/自建双模式）
 
 ```java
 @Override
-protected ClientPacketHandler createPacketHandler() {
-    return new MyPacketHandler();
+protected void startService() throws Exception {
+    StorageConfiguration storage = configuration.storage();
+
+    StorageDescriptor descriptor;
+    DataSource dataSource;
+    if (storage.hasOverride()) {
+        // 自建模式：模块配置了独立 MySQL
+        descriptor = storage.toDescriptor().withTablePrefix(storage.tablePrefix());
+        dataSource = storageManager.resolveModuleDataSource("mymodule", null, dataFolder, descriptor);
+    } else {
+        // 共享模式：使用本体统一数据源
+        descriptor = storageManager.getDescriptor().withTablePrefix(storage.tablePrefix());
+        dataSource = storageManager.resolveModuleDataSource("mymodule",
+            storage.sqliteFileName(), dataFolder, null);
+    }
+
+    repository = new JdbcMyRepository(dataSource, descriptor, dataFolder, logger);
+    repository.initialize();  // 建表（幂等）
+
+    service = new MyService(repository, ...);
+    service.start();
 }
 
 @Override
-protected int packetHandlerPriority() {
-    return 0;
+protected void stopService() {
+    if (service != null) { service.shutdown(); service = null; }
+    if (repository != null) { repository.shutdown(); repository = null; }
+    storageManager.closeModuleDataSource("mymodule");
 }
 ```
 
----
-
-## 第九步：注册 Capability（跨模块通信）
-
-模块可以暴露自己的能力供其他模块调用：
-
-```java
-// 定义接口（放在公共包中，或 axs-api 内）
-public interface MyService {
-    void doSomething(Player player);
-}
-
-// 模块内实现并注册
-@Override
-protected void startService() {
-    context.registerCapability(MyService.class, new MyServiceImpl());
-}
-
-// 其他模块获取
-MyService service = context.getCapability(MyService.class);
-if (service != null) {
-    service.doSomething(player);
-}
-```
+> **共享模式**（默认）：所有模块复用本体 HikariCP 连接池，用 `tablePrefix` 隔离表。
+> **自建模式**：模块配置了独立 MySQL 时自建连接池，向后兼容。
+> **SQLite 模式**：各模块使用各自的 `<moduleId>.db` 文件。
 
 ---
 
-## 第十步：打包与部署
+## 第十一步：打包与部署
 
 1. 执行 `./gradlew jar` 构建模块 JAR
 2. 将 `build/libs/MyAXSModule.jar` 复制到服务器：
@@ -607,46 +855,66 @@ modules:
 
 ---
 
+## 第十二步：模块 Ed25519 签名（可选）
+
+对 `module.yml` 的 `id:version:main` 做 Ed25519 签名，供服主在 `module-signature-public-keys` 中校验模块完整性：
+
+```bash
+pip install cryptography
+python scripts/sign-module.py keygen --out-dir ./module-signing-keys
+python scripts/sign-module.py sign --module-yml src/main/resources/module.yml --private-key module-signing-keys/ed25519-private.pem
+python scripts/sign-module.py pubkey --public-key module-signing-keys/ed25519-public.pem
+```
+
+将公钥填入宿主 `config.yml` 的 `module-signature-public-keys` 列表，未通过签名校验的模块将拒绝加载。
+
+---
+
 ## 常见问题与排坑
 
 ### Q: 模块加载失败，控制台报 `ClassNotFoundException`
 - 检查 `module.yml` 中的 `main` 字段是否与 Java 类全限定名一致
 - 检查模块 JAR 是否包含编译后的 `.class` 文件
+- 检查 `external-depends` 声明的插件是否已安装
 
 ### Q: `module.yml` 放错位置
-- 必须放在 `src/main/resources/module.yml`，打包后会位于 JAR 根目录
-- 放在 `src/main/resources/META-INF/` 或其他子目录下会找不到
+- 必须放在 `src/main/resources/module.yml`，打包后位于 JAR 根目录
+- 放在 `META-INF/` 或其他子目录下会找不到
 
 ### Q: UI 文件导出后客户端看不到
 - 确认玩家客户端已安装 ArcartX 模组
-- 检查 `uiResourceMappings()` 的键值是否正确（Jar 内路径 → 输出路径）
-- 检查 `bindUi()` 的 `relativePath` 是否与 `uiResourceMappings()` 的值一致
+- 检查 `uiSpec()` 的映射键值是否正确（Jar 内路径 → 输出路径）
+- 检查 `registerModuleUi()` 的 `relativeUiPath` 是否与 `uiSpec()` 的值一致
 
 ### Q: reload 后 UI 丢失
 - 确保使用 `AbstractAXSModule` 的 reload 机制（基类已处理 UI 保持逻辑）
-- 不要手动调用 `context.unregisterUi()` 后再重新注册
+- 不要手动调用 `packetBridge.unregisterUi()` 后再重新注册
 
 ### Q: 配置没有生效
 - 配置文件位置：`plugins/ArcartXSuite/data/<moduleId>/config.yml`
-- 旧版本（1.0.x）的配置在宿主根目录，基类会自动迁移到新位置
-- 迁移后会提示运行 `/axs config preview <moduleId>` 检查兼容性
+- 配置版本不匹配时会触发迁移，运行 `/axs config preview <moduleId>` 检查兼容性
+- 使用 `dynamicSection` 声明用户自定义 key 的配置节，避免诊断误报
 
-### Q: 依赖模块未加载导致本模块启动失败
-- `depends` 为硬依赖，缺少时本模块会拒绝启动
-- `softdepends` 为软依赖，缺少时仅跳过，不报错
-- 检查被依赖模块的 `id` 是否拼写正确
+### Q: 跨模块调用返回 null
+- 使用 `Supplier` 延迟查找：`Supplier<MailDispatchable> mail = () -> getCapability(MailDispatchable.class)`
+- 检查目标模块是否在 `softdepends` 中声明（确保加载顺序）
+- 检查目标模块是否已注册对应 Capability
+
+### Q: 可以 `import xuanmo.arcartxsuite.bridge.*` 吗？
+- **不可以**。模块只能通过 `AbstractAXSModule` 注入的 `protected` 字段或 `ModuleContext` 获取的 API 接口与宿主交互
+- 直接引用宿主实现类会导致 ClassLoader 隔离问题，且可能在不同版本中不兼容
+
+### Q: 可以用 `context.getModule()` 获取其他模块实例吗？
+- **不推荐**。AXS 的 30 个内置模块均未使用此方式
+- 跨模块通信应通过 `registerCapability` / `getCapability` 或 `EventBusCapability` 完成
 
 ### Q: 占位符扩展未注册
 - 确保服务器已安装 PlaceholderAPI
+- 在 `module.yml` 的 `external-depends` 中声明 `PlaceholderAPI`
 - `createPlaceholderExpansion()` 返回的对象需符合 PAPI 扩展规范
-
-### Q: 可以 `import xuanmo.arcartxsuite.bridge.*` 吗？
-- **不可以**。模块只能通过 `ModuleContext` 获取的 API 接口与宿主交互
-- 直接引用宿主实现类会导致 ClassLoader 隔离问题，且可能在不同版本中不兼容
 
 ---
 
 ## 更多参考
 
 - `axs-api/src/main/java/xuanmo/arcartxsuite/api/` — 所有公共接口的源码与 Javadoc
-- `src/main/java/xuanmo/arcartxsuite/module/` — 宿主加载模块的参考实现

@@ -1,6 +1,7 @@
 package xuanmo.arcartxsuite.api.capability;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -41,4 +42,43 @@ public interface ChatMutable {
      * @return 是否被禁言
      */
     boolean isMuted(@NotNull UUID playerUuid);
+
+    /**
+     * 列出当前所有处于生效状态的禁言记录。
+     * <p>
+     * 仅返回缓存中未过期的禁言记录。离线玩家的禁言可能不在缓存中，
+     * 调用方不应将此结果视为完整的持久化禁言列表。
+     *
+     * @return 禁言信息列表，无禁言时返回空列表
+     */
+    @NotNull
+    List<MuteInfo> listMutes();
+
+    /**
+     * 禁言信息摘要，用于跨模块传递禁言列表数据。
+     *
+     * @param playerUuid 被禁言玩家 UUID
+     * @param playerName 被禁言玩家名称（可能为 null 如果无法解析）
+     * @param mutedBy    执行禁言的操作者名称
+     * @param reason     禁言原因
+     * @param createdAt  禁言创建时间
+     * @param expiresAt  禁言过期时间，null 表示永久禁言
+     */
+    record MuteInfo(
+        @NotNull UUID playerUuid,
+        @Nullable String playerName,
+        @Nullable String mutedBy,
+        @Nullable String reason,
+        @Nullable Instant createdAt,
+        @Nullable Instant expiresAt
+    ) {
+        /**
+         * 判断禁言是否为永久禁言。
+         *
+         * @return {@code true} 表示永久禁言
+         */
+        public boolean isPermanent() {
+            return expiresAt == null;
+        }
+    }
 }

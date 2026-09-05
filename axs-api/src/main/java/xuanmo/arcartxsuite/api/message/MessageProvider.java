@@ -9,7 +9,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 import java.util.function.Function;
-import org.bukkit.ChatColor;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import net.md_5.bungee.api.ChatColor;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -25,6 +27,9 @@ import org.jetbrains.annotations.Nullable;
  * }</pre>
  */
 public final class MessageProvider {
+
+    /** 匹配 {@code &#rrggbb} 十六进制颜色码（1.16+）。 */
+    private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("&#([A-Fa-f0-9]{6})");
 
     private final File file;
     private final String resourcePath;
@@ -49,6 +54,28 @@ public final class MessageProvider {
     }
 
     /**
+     * 翻译颜色码：先处理 {@code &#rrggbb} 十六进制颜色（1.16+），再处理 {@code &} 单字符颜色码。
+     *
+     * @param input 原始文本
+     * @return 翻译后的文本
+     */
+    @NotNull
+    public static String translateColors(@NotNull String input) {
+        if (input.indexOf('&') < 0) {
+            return input;
+        }
+        // 先处理 &#rrggbb 十六进制颜色
+        Matcher matcher = HEX_COLOR_PATTERN.matcher(input);
+        StringBuffer sb = new StringBuffer(input.length() + 16);
+        while (matcher.find()) {
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(ChatColor.of("#" + matcher.group(1)).toString()));
+        }
+        matcher.appendTail(sb);
+        // 再处理 & 单字符颜色码
+        return ChatColor.translateAlternateColorCodes('&', sb.toString());
+    }
+
+    /**
      * 加载或重载消息文件。先导出默认文件（若不存在），再读取用户自定义版本。
      */
     public void load() {
@@ -61,7 +88,7 @@ public final class MessageProvider {
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
         for (String key : yaml.getKeys(true)) {
             if (yaml.isString(key)) {
-                messages.put(key, ChatColor.translateAlternateColorCodes('&', yaml.getString(key, "")));
+                messages.put(key, translateColors(yaml.getString(key, "")));
             }
         }
         logger.fine("[Messages] 加载 " + messages.size() + " 条消息 from " + file.getName());
@@ -81,9 +108,13 @@ public final class MessageProvider {
             return key;
         }
         if (args != null && args.length > 0) {
-            for (int i = 0; i < args.length; i++) {
-                template = template.replace("{" + i + "}", args[i] == null ? "" : args[i].toString());
+            // 先对 args 中的 { 和 } 做临时转义，避免替换后的内容被后续占位符二次匹配
+            for (int i = args.length - 1; i >= 0; i--) {
+                String arg = args[i] == null ? "" : args[i].toString().replace("{", "\uFE5B").replace("}", "\uFE5D");
+                template = template.replace("{" + i + "}", arg);
             }
+            // 还原转义
+            template = template.replace("\uFE5B", "{").replace("\uFE5D", "}");
         }
         return template;
     }
@@ -156,11 +187,11 @@ public final class MessageProvider {
             defaults.loadFromString(new String(input.readAllBytes(), StandardCharsets.UTF_8));
             for (String key : defaults.getKeys(true)) {
                 if (defaults.isString(key)) {
-                    messages.put(key, ChatColor.translateAlternateColorCodes('&', defaults.getString(key, "")));
+                    messages.put(key, translateColors(defaults.getString(key, "")));
                 }
             }
         } catch (Exception e) {
-            logger.warning("[Messages] Failed to load bundled defaults: " + e.getMessage());
+            logger.warning("[Messages] 加载内置默认消息失败，所有消息将返回键名: " + e.getMessage());
         }
     }
 }

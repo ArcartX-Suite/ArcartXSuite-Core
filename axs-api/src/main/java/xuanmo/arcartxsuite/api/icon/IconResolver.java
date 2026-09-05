@@ -24,6 +24,7 @@ import org.bukkit.profile.PlayerTextures;
 import org.jetbrains.annotations.Nullable;
 import xuanmo.arcartxsuite.api.bridge.ItemBridgeAPI;
 import xuanmo.arcartxsuite.api.item.ItemSourceRegistry;
+import xuanmo.arcartxsuite.api.util.SnbtItemAdapter;
 
 /**
  * 通用图标解析器，将 {@link IconDefinition} 转换为 ItemStack 或 itemJson 字符串。
@@ -85,7 +86,6 @@ public final class IconResolver {
         if (stack == null || itemStackBridge == null) {
             return "";
         }
-        stack = applyCustomNbt(stack, icon);
         return itemStackBridge.itemToJson(stack).orElse("");
     }
 
@@ -107,14 +107,9 @@ public final class IconResolver {
             return stack;
         }
         if (icon.nbtString() != null && !icon.nbtString().isBlank()) {
-            try {
-                ItemStack modified =
-                    Bukkit.getUnsafe().modifyItemStack(stack.clone(), icon.nbtString());
-                if (modified != null) {
-                    stack = modified;
-                }
-            } catch (Exception ignored) {
-                // SNBT 解析失败时保留原物品
+            ItemStack modified = SnbtItemAdapter.applySnbt(stack, icon.nbtString());
+            if (modified != null) {
+                stack = modified;
             }
         }
         if (itemStackBridge == null) {
@@ -138,11 +133,25 @@ public final class IconResolver {
         return stack;
     }
 
+    /**
+     * 将图标定义解析为 ItemStack（含自定义 NBT），用于奖励发放等需要实际物品的场景。
+     *
+     * @param player 目标玩家，用于占位符解析和外部物品库生成
+     * @param icon   图标定义，为 null 或无有效图标时返回 null
+     * @return 生成的 ItemStack（已应用自定义 NBT），失败时返回 null
+     */
     @Nullable
-    private ItemStack resolveItemStack(Player player, IconDefinition icon) {
+    public ItemStack resolveItemStack(Player player, @Nullable IconDefinition icon) {
+        if (icon == null || !icon.hasIcon()) {
+            return null;
+        }
+        if (icon.json() != null && !icon.json().isBlank()) {
+            ItemStack fromJson = SnbtItemAdapter.applySnbt(new ItemStack(Material.STONE), icon.json());
+            return fromJson != null ? fromJson : null;
+        }
         ItemStack generated = generateExternalItem(player, icon);
         if (generated != null) {
-            return generated;
+            return applyCustomNbt(generated, icon);
         }
         Material material = Material.matchMaterial(icon.material());
         if (material == null || material.isAir()) {
@@ -167,7 +176,7 @@ public final class IconResolver {
             applyColor(meta, icon);
             stack.setItemMeta(meta);
         }
-        return stack;
+        return applyCustomNbt(stack, icon);
     }
 
     private String applyPlaceholders(Player player, String input) {
@@ -256,6 +265,10 @@ public final class IconResolver {
         String source = icon.source() == null ? "" : icon.source().trim().toLowerCase(Locale.ROOT);
         if (!source.isBlank() && icon.sourceId() != null && !icon.sourceId().isBlank()) {
             return switch (source) {
+                case "minecraft", "plain", "vanilla" -> {
+                    Material mat = Material.matchMaterial(icon.sourceId());
+                    yield mat != null && !mat.isAir() ? new ItemStack(mat, Math.max(1, icon.amount())) : null;
+                }
                 case "mythic", "mythicmobs" -> itemSourceRegistry.generateMythicItem(icon.sourceId(), icon.amount());
                 case "neige", "neigeitems" -> itemSourceRegistry.generateNeigeItem(icon.sourceId(), icon.amount());
                 case "overture" -> itemSourceRegistry.generateOvertureItem(icon.sourceId(), player, icon.amount());

@@ -15,11 +15,13 @@ import xuanmo.arcartxsuite.api.bridge.ApiStability;
  * <pre>
  * xp-curve:
  *   - level: 1
- *     formula: "500 + 50 * level"
+ *     formula: "500 + 50 * global.level"
  *   - level: 50
- *     formula: "500 + 50 * 49 + (level - 49) * 100"
+ *     formula: "500 + 50 * 49 + (global.level - 49) * 100"
  * </pre>
- * 每个断点指定一个起始等级与一个 ARIA 表达式，表达式以变量 {@code level} 为入参，
+ * 每个断点指定一个起始等级与一个 ARIA 表达式，表达式以变量 {@code global.level} 为入参
+ * （绑定值由 {@link AriaBridge} 注入到 ARIA 的 {@code global.} 命名空间，必须用 {@code global.} 前缀访问；
+ * 裸名 {@code level} 因 ARIA 命名空间隔离无法读到绑定值），
  * 计算结果即为"升到该等级所需的经验值"。系统按断点等级升序排列，
  * 给定目标等级时选取最大的且不超过目标等级的断点公式进行求值。
  * <p>
@@ -66,7 +68,8 @@ public record XpCurve(
      * 返回升到指定等级所需的经验值。
      * <p>
      * 等级 ≤ 1 时返回 0；否则选取最大的且不超过 {@code level} 的断点公式，
-     * 以 {@code {"level": level}} 为变量绑定调用 ARIA 求值，结果强制为不小于 1 的整数。
+     * 以 {@code {"level": level}} 为变量绑定调用 ARIA 求值（绑定值注入到 ARIA {@code global.} 命名空间，
+     * 公式中需用 {@code global.level} 访问），结果强制为不小于 1 的整数。
      *
      * @param level 目标等级
      * @return 所需经验值，等级 ≤ 1 时返回 0
@@ -139,7 +142,7 @@ public record XpCurve(
      * 经验曲线断点，指定从某个等级起生效的 ARIA 表达式。
      *
      * @param level   起始等级（含），首个断点必须为 1
-     * @param formula ARIA 表达式，以变量 {@code level} 为入参
+     * @param formula ARIA 表达式，以变量 {@code global.level} 为入参（需用 {@code global.} 前缀访问绑定值）
      */
     @ApiStability.Stable
     public record Breakpoint(int level, @NotNull String formula) {

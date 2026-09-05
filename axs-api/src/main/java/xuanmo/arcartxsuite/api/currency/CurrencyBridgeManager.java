@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
@@ -21,6 +23,8 @@ import xuanmo.arcartxsuite.api.placeholder.PlaceholderResolverAPI;
 
 public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
 
+    private static final Logger LOGGER = Logger.getLogger("ArcartXSuite");
+    private static final Pattern MINECRAFT_NAME_PATTERN = Pattern.compile("[a-zA-Z0-9_]{1,16}");
     private static final String RANGE_FAILURE = "金额超出该货币可处理范围。";
 
     private final JavaPlugin plugin;
@@ -186,6 +190,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
             try {
                 return BigDecimal.valueOf(economy.getBalance(player));
             } catch (Exception | LinkageError exception) {
+                LOGGER.warning("[" + definition().id() + "] Vault balance 查询失败: " + exception.getMessage());
                 return BigDecimal.ZERO;
             }
         }
@@ -239,6 +244,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                     ? CurrencyTransactionResult.ok()
                     : CurrencyTransactionResult.failure(response.errorMessage != null && !response.errorMessage.isBlank() ? response.errorMessage : defaultMessage);
             } catch (Exception | LinkageError exception) {
+                LOGGER.warning("[" + definition().id() + "] Vault " + (isWithdraw ? "withdraw" : "deposit") + " 失败: " + exception.getMessage());
                 return CurrencyTransactionResult.failure(defaultMessage);
             }
         }
@@ -272,6 +278,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
             try {
                 return BigDecimal.valueOf(api.look(player.getUniqueId()));
             } catch (Exception | LinkageError exception) {
+                LOGGER.warning("[" + definition().id() + "] PlayerPoints balance 查询失败: " + exception.getMessage());
                 return BigDecimal.ZERO;
             }
         }
@@ -329,6 +336,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                     : api.give(player.getUniqueId(), points);
                 return success ? CurrencyTransactionResult.ok() : CurrencyTransactionResult.failure(defaultMessage);
             } catch (Exception | LinkageError exception) {
+                LOGGER.warning("[" + definition().id() + "] PlayerPoints " + (isTake ? "take" : "give") + " 失败: " + exception.getMessage());
                 return CurrencyTransactionResult.failure(defaultMessage);
             }
         }
@@ -367,6 +375,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                 BigDecimal balance = playerData.getBalance();
                 return balance != null ? balance : BigDecimal.ZERO;
             } catch (Exception | LinkageError exception) {
+                LOGGER.warning("[" + definition().id() + "] XConomy balance 查询失败: " + exception.getMessage());
                 return BigDecimal.ZERO;
             }
         }
@@ -409,6 +418,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                     default -> CurrencyTransactionResult.failure(defaultMessage);
                 };
             } catch (Exception | LinkageError exception) {
+                LOGGER.warning("[" + definition().id() + "] XConomy changeBalance 失败: " + exception.getMessage());
                 return CurrencyTransactionResult.failure(defaultMessage);
             }
         }
@@ -503,13 +513,25 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
         }
 
         private boolean dispatchConsoleCommand(String template, Player player, BigDecimal amount) {
+            String playerName = player.getName();
+            if (!MINECRAFT_NAME_PATTERN.matcher(playerName).matches()) {
+                LOGGER.warning("[" + definition().id() + "] 拒绝执行命令：玩家名包含非法字符: " + playerName);
+                return false;
+            }
+            String amountStr = formatAmount(amount);
             String rendered = template
-                .replace("%player%", player.getName())
+                .replace("%player%", playerName)
                 .replace("%uuid%", player.getUniqueId().toString())
-                .replace("%amount%", formatAmount(amount));
+                .replace("%amount%", amountStr);
+            // 防止换行注入多条命令
+            if (rendered.indexOf('\n') >= 0 || rendered.indexOf('\r') >= 0) {
+                LOGGER.warning("[" + definition().id() + "] 拒绝执行命令：渲染结果包含换行符");
+                return false;
+            }
             if (rendered.startsWith("/")) {
                 rendered = rendered.substring(1);
             }
+            LOGGER.fine("[" + definition().id() + "] 执行货币命令: " + rendered);
             return Bukkit.dispatchCommand(Bukkit.getConsoleSender(), rendered);
         }
     }
@@ -553,7 +575,8 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
             if (vaultEconomy != null) {
                 try {
                     return BigDecimal.valueOf(vaultEconomy.getBalance(player));
-                } catch (Exception | LinkageError ignored) {
+                } catch (Exception | LinkageError exception) {
+                    LOGGER.warning("[" + definition().id() + "] Rondo/Vault balance 查询失败: " + exception.getMessage());
                 }
             }
             // 回退 Rondo 原生
@@ -561,7 +584,8 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                 try {
                     BigDecimal result = rondoApi.getBalance(player.getUniqueId(), definition().id());
                     return result != null ? result : BigDecimal.ZERO;
-                } catch (Exception | LinkageError ignored) {
+                } catch (Exception | LinkageError exception) {
+                    LOGGER.warning("[" + definition().id() + "] Rondo balance 查询失败: " + exception.getMessage());
                 }
             }
             return BigDecimal.ZERO;
@@ -593,7 +617,8 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                     return response.transactionSuccess()
                         ? CurrencyTransactionResult.ok()
                         : CurrencyTransactionResult.failure(response.errorMessage != null && !response.errorMessage.isBlank() ? response.errorMessage : defaultMessage);
-                } catch (Exception | LinkageError ignored) {
+                } catch (Exception | LinkageError exception) {
+                    LOGGER.warning("[" + definition().id() + "] Rondo/Vault " + (isWithdraw ? "withdraw" : "deposit") + " 失败，回退 Rondo 原生: " + exception.getMessage());
                 }
             }
             // 回退 Rondo 原生
@@ -603,7 +628,8 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                         ? rondoApi.withdraw(player.getUniqueId(), definition().id(), normalize(amount), "ArcartXSuite")
                         : rondoApi.deposit(player.getUniqueId(), definition().id(), normalize(amount), "ArcartXSuite");
                     return success ? CurrencyTransactionResult.ok() : CurrencyTransactionResult.failure("Rondo " + defaultMessage);
-                } catch (Exception | LinkageError ignored) {
+                } catch (Exception | LinkageError exception) {
+                    LOGGER.warning("[" + definition().id() + "] Rondo " + (isWithdraw ? "withdraw" : "deposit") + " 失败: " + exception.getMessage());
                 }
             }
             return CurrencyTransactionResult.failure(defaultMessage);
@@ -674,6 +700,7 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
         try {
             return new BigDecimal(normalized);
         } catch (NumberFormatException exception) {
+            LOGGER.warning("货币余额解析失败，原始值: " + rawValue + "，清洗后: " + normalized + "，返回 0");
             return BigDecimal.ZERO;
         }
     }
@@ -757,12 +784,14 @@ public final class CurrencyBridgeManager implements CurrencyBridgeAPI {
                 try {
                     BigDecimal balanceAfter = delegate.balance(player);
                     payload.put("balance_after", balanceAfter.stripTrailingZeros().toPlainString());
-                } catch (Exception ignored) {
+                } catch (Exception exception) {
+                    LOGGER.fine("[" + currencyId + "] 货币事件 balance_after 获取失败: " + exception.getMessage());
                     payload.put("balance_after", "0");
                 }
                 bus.publish(topic, player, payload);
-            } catch (Exception ignored) {
+            } catch (Exception exception) {
                 // 事件分发失败不应影响货币操作主流程
+                LOGGER.fine("[" + currencyId + "] 货币事件分发失败: " + exception.getMessage());
             }
         }
     }

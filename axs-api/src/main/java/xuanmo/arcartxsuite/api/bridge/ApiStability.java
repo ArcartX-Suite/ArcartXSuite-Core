@@ -44,11 +44,14 @@ public final class ApiStability {
 
     /**
      * 已弃用 API —— 将在下一个大版本中移除。
+     * <p>
+     * 注意：本注解命名为 {@code ScheduledForRemoval} 而非 {@code Deprecated}，
+     * 以避免与 {@link java.lang.Deprecated} 重名导致 IDE 警告与编译器机制失效。
      */
     @Documented
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.TYPE, ElementType.METHOD, ElementType.FIELD})
-    public @interface Deprecated {
+    public @interface ScheduledForRemoval {
         /** 替代方案说明 */
         String replacedBy() default "";
         /** 预计移除版本 */

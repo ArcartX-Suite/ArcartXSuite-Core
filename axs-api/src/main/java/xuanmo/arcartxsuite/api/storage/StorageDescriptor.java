@@ -33,4 +33,35 @@ public record StorageDescriptor(
         return new StorageDescriptor(true, host, port, database, username, password,
             poolSize, "", tablePrefix);
     }
+
+    /**
+     * 返回一个仅替换 tablePrefix 的新描述符副本，其余字段不变。
+     * <p>
+     * 用于共享模式下将本体全局描述符的空 tablePrefix 替换为模块自己的表前缀。
+     *
+     * @param newTablePrefix 新的表前缀，为 {@code null} 时使用空字符串
+     * @return 带新 tablePrefix 的描述符副本
+     * @since 1.5.0
+     */
+    public StorageDescriptor withTablePrefix(String newTablePrefix) {
+        return new StorageDescriptor(isMysql, host, port, database, username, password,
+            poolSize, sqliteFileName, newTablePrefix != null ? newTablePrefix : "");
+    }
+
+    /**
+     * 脱敏的 toString，避免 password 通过日志/异常栈泄露。
+     */
+    @Override
+    public String toString() {
+        return "StorageDescriptor{isMysql=" + isMysql
+            + ", host=" + host
+            + ", port=" + port
+            + ", database=" + database
+            + ", username=" + username
+            + ", password=***"
+            + ", poolSize=" + poolSize
+            + ", sqliteFileName=" + sqliteFileName
+            + ", tablePrefix=" + tablePrefix
+            + "}";
+    }
 }

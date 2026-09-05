@@ -7,7 +7,9 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -36,6 +38,11 @@ public final class AxsScheduler {
     private static Method FOLIA_ASYNC_RUN_NOW;
     private static Method FOLIA_ASYNC_RUN_DELAYED;
     private static Method FOLIA_ASYNC_RUN_AT_FIXED_RATE;
+    private static Method FOLIA_ENTITY_GET_SCHEDULER;
+    private static Method FOLIA_ENTITY_RUN;
+
+    // ── FoliaTaskWrapper 反射方法按类缓存（Folia task 类编译时不可用）──
+    private static final Map<Class<?>, Method> WRAPPER_METHOD_CACHE = new ConcurrentHashMap<>();
 
     private static void initFoliaReflect() {
         if (foliaReflectInit) return;
@@ -55,6 +62,10 @@ public final class AxsScheduler {
                 FOLIA_ASYNC_RUN_NOW = asyncSchedClass.getMethod("runNow", Plugin.class, Consumer.class);
                 FOLIA_ASYNC_RUN_DELAYED = asyncSchedClass.getMethod("runDelayed", Plugin.class, Consumer.class, long.class, TimeUnit.class);
                 FOLIA_ASYNC_RUN_AT_FIXED_RATE = asyncSchedClass.getMethod("runAtFixedRate", Plugin.class, Consumer.class, long.class, long.class, TimeUnit.class);
+                // 实体调度：Entity.getScheduler() → EntityScheduler.run(Plugin, Consumer, Runnable)
+                FOLIA_ENTITY_GET_SCHEDULER = Entity.class.getMethod("getScheduler");
+                Class<?> entitySchedClass = FOLIA_ENTITY_GET_SCHEDULER.getReturnType();
+                FOLIA_ENTITY_RUN = entitySchedClass.getMethod("run", Plugin.class, Consumer.class, Runnable.class);
             } catch (Exception e) {
                 Bukkit.getLogger().log(Level.SEVERE, "[AXS] Failed to cache Folia scheduler methods", e);
             }
@@ -71,6 +82,11 @@ public final class AxsScheduler {
         return Bukkit.getScheduler().runTask(plugin, task);
     }
 
+    /**
+     * 延迟执行同步任务。
+     *
+     * @param delayTicks 延迟 tick 数。Folia GlobalRegionScheduler.runDelayed 的单位也是 tick，无需换算。
+     */
     public static BukkitTask runTaskLater(Plugin plugin, Runnable task, long delayTicks) {
         if (PlatformCompat.isFolia()) {
             return wrap(foliaGlobalRunDelayed(plugin, task, delayTicks), true);
@@ -110,6 +126,12 @@ public final class AxsScheduler {
         return Bukkit.getScheduler().runTaskAsynchronously(plugin, task);
     }
 
+    /**
+     * 延迟执行异步任务。
+     *
+     * @param delayTicks 延迟 tick 数。Folia AsyncScheduler.runDelayed 接受 TimeUnit，
+     *                   此处将 tick × 50ms 换算为毫秒后传入。
+     */
     public static BukkitTask runAsyncLater(Plugin plugin, Runnable task, long delayTicks) {
         if (PlatformCompat.isFolia()) {
             return wrap(foliaAsyncRunDelayed(plugin, task, delayTicks * 50, TimeUnit.MILLISECONDS), false);
@@ -117,6 +139,12 @@ public final class AxsScheduler {
         return Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, task, delayTicks);
     }
 
+    /**
+     * 定时循环执行异步任务。
+     *
+     * @param delayTicks  首次延迟 tick 数（Folia 异步调度器按毫秒处理，内部 × 50 换算）
+     * @param periodTicks 循环间隔 tick 数（同上）
+     */
     public static BukkitTask runAsyncTimer(Plugin plugin, Runnable task, long delayTicks, long periodTicks) {
         if (PlatformCompat.isFolia()) {
             return wrap(foliaAsyncRunAtFixedRate(plugin, task, delayTicks * 50, periodTicks * 50, TimeUnit.MILLISECONDS), false);
@@ -158,9 +186,27 @@ public final class AxsScheduler {
     }
 
     private static BukkitTask wrap(Object foliaHandle, boolean sync) {
-        if (foliaHandle == null) return null;
+        if (foliaHandle == null) return new NoOpBukkitTask(sync);
         if (foliaHandle instanceof BukkitTask) return (BukkitTask) foliaHandle;
         return new FoliaTaskWrapper(foliaHandle, sync);
+    }
+
+    /**
+     * Folia 调度失败时的 no-op 占位，避免调用方拿到 null 后 cancel() NPE。
+     */
+    private static final class NoOpBukkitTask implements BukkitTask {
+        private final boolean sync;
+        private volatile boolean cancelled = true;
+
+        NoOpBukkitTask(boolean sync) {
+            this.sync = sync;
+        }
+
+        @Override public int getTaskId() { return -1; }
+        @Override public Plugin getOwner() { return null; }
+        @Override public void cancel() { cancelled = true; }
+        @Override public boolean isCancelled() { return cancelled; }
+        @Override public boolean isSync() { return sync; }
     }
 
     private static final class FoliaTaskWrapper implements BukkitTask {
@@ -174,13 +220,20 @@ public final class AxsScheduler {
         FoliaTaskWrapper(Object handle, boolean sync) {
             this.handle = handle;
             this.sync = sync;
-            Method cancel = null, getTaskId = null, getOwner = null;
-            try { cancel = handle.getClass().getMethod("cancel"); } catch (Exception ignored) {}
-            try { getTaskId = handle.getClass().getMethod("getTaskId"); } catch (Exception ignored) {}
-            try { getOwner = handle.getClass().getMethod("getOwner"); } catch (Exception ignored) {}
-            this.cancelMethod = cancel;
-            this.getTaskIdMethod = getTaskId;
-            this.getOwnerMethod = getOwner;
+            this.cancelMethod = cacheWrapperMethod(handle, "cancel");
+            this.getTaskIdMethod = cacheWrapperMethod(handle, "getTaskId");
+            this.getOwnerMethod = cacheWrapperMethod(handle, "getOwner");
+        }
+
+        private static Method cacheWrapperMethod(Object handle, String name) {
+            Class<?> cls = handle.getClass();
+            return WRAPPER_METHOD_CACHE.computeIfAbsent(cls, c -> {
+                try {
+                    return c.getMethod(name);
+                } catch (Exception ignored) {
+                    return null;
+                }
+            });
         }
 
         @Override public int getTaskId() {
@@ -229,6 +282,9 @@ public final class AxsScheduler {
         }
     }
 
+    /**
+     * Folia GlobalRegionScheduler.runDelayed，延迟单位为 tick（与 Bukkit 一致，无需换算）。
+     */
     private static Object foliaGlobalRunDelayed(Plugin plugin, Runnable task, long delayTicks) {
         initFoliaReflect();
         try {
@@ -256,12 +312,13 @@ public final class AxsScheduler {
     }
 
     private static Object foliaEntityRun(Plugin plugin, Entity entity, Runnable task) {
+        initFoliaReflect();
         try {
-            Object scheduler = entity.getClass().getMethod("getScheduler").invoke(entity);
+            if (FOLIA_ENTITY_GET_SCHEDULER == null || FOLIA_ENTITY_RUN == null) return null;
+            Object scheduler = FOLIA_ENTITY_GET_SCHEDULER.invoke(entity);
             Consumer<Object> consumer = t -> task.run();
             Runnable retired = () -> {};
-            Method method = scheduler.getClass().getMethod("run", Plugin.class, Consumer.class, Runnable.class);
-            return method.invoke(scheduler, plugin, consumer, retired);
+            return FOLIA_ENTITY_RUN.invoke(scheduler, plugin, consumer, retired);
         } catch (Exception e) {
             Bukkit.getLogger().log(Level.SEVERE, "[AXS] Failed to invoke Folia EntityScheduler.run", e);
             return null;
